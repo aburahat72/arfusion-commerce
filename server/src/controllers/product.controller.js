@@ -34,7 +34,15 @@ export const createProduct = async (req, res) => {
 export const getAllProducts = async (req, res) => {
   try {
     //  Get search value from the query parameters
-    const { search, category, minPrice, maxPrice, sort } = req.query;
+    const {
+      search,
+      category,
+      minPrice,
+      maxPrice,
+      sort,
+      page = 1,
+      limit = 10,
+    } = req.query;
 
     // Base filter - always show only active products
     const filter = {
@@ -113,14 +121,43 @@ export const getAllProducts = async (req, res) => {
       sortOption = { createdAt: -1 };
     }
 
-    // Fetch, filter and sort products
+    // Pagination
+    const pageNumber = Number(page);
+    const limitNumber = Number(limit);
+
+    // Validate page and limit
+    if (
+      !Number.isInteger(pageNumber) ||
+      !Number.isInteger(limitNumber) ||
+      pageNumber < 1 ||
+      limitNumber < 1
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Page and limit must be positive integers",
+      });
+    }
+
+    // Calculate how many products to skip
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Get total number of matching products
+    const totalProducts = await Product.countDocuments(filter);
+
+    // Fetch, filter, sorting and pagination products
     // Fetch matching products using the filter
-    const products = await Product.find(filter).sort(sortOption);
+    const products = await Product.find(filter)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limitNumber);
 
     // Return matching products
     return res.status(200).json({
       success: true,
       count: products.length,
+      totalProducts,
+      currentPage: pageNumber,
+      totalPages: Math.ceil(totalProducts / limitNumber),
       products,
     });
   } catch (error) {

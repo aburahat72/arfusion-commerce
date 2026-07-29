@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import connectDB from "./src/config/db.js";
 import authRoutes from "./src/routes/auth.routes.js";
 import productRoutes from "./src/routes/product.routes.js";
+import cartRoutes from "./src/routes/cart.routes.js";
+import orderRoutes from "./src/routes/order.routes.js";
 
 dotenv.config();
 
@@ -13,6 +15,8 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes);
+app.use("/api/orders", orderRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome to ARFusion Commerce API");
