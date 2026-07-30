@@ -1,6 +1,7 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { sendWelcomeEmail } from "../services/email.services.js";
 
 // Handle user registration
 export const registerUser = async (req, res) => {
@@ -22,6 +23,13 @@ export const registerUser = async (req, res) => {
       email,
       password,
     });
+
+    // Send welcome email (don't fail registration if email fails)
+    try {
+      await sendWelcomeEmail(user.email, user.fullName);
+    } catch (error) {
+      console.error("Welcome email failed:", error);
+    }
 
     res.status(201).json({
       success: true,

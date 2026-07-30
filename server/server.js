@@ -14,6 +14,8 @@ import wishlistRoutes from "./src/routes/wishlist.routes.js";
 import reviewRoutes from "./src/routes/review.routes.js";
 import addressRoutes from "./src/routes/address.routes.js";
 import couponRoutes from "./src/routes/coupon.routes.js";
+import dashboardRoutes from "./src/routes/dashboard.routes.js";
+import analyticsRoutes from "./src/routes/analytics.routes.js";
 
 const app = express();
 
@@ -31,6 +33,10 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
+
+// admin dashboard routes
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // Home Route
 app.get("/", (req, res) => {

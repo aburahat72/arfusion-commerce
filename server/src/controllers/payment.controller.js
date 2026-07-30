@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import razorpay from "../config/razorpay.js";
 import Order from "../models/order.model.js";
+import { sendPaymentSuccessEmail } from "../services/email.services.js";
 
 // createPaymentOrder
 // Create Razorpay Order
@@ -120,6 +121,18 @@ export const verifyPayment = async (req, res) => {
 
     // Save order
     await order.save();
+
+    // Send payment success email to the customer
+    try {
+      await sendPaymentSuccessEmail(
+        req.user.email,
+        req.user.fullName,
+        order._id,
+        order.totalPrice,
+      );
+    } catch (error) {
+      console.error("Payment success email failed:", error);
+    }
 
     // Return success response
     return res.status(200).json({

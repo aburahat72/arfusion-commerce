@@ -1,7 +1,16 @@
+import mongoose from "mongoose";
+
 import Order from "../models/order.model.js";
 import Cart from "../models/cart.model.js";
 import Product from "../models/product.model.js";
-import mongoose from "mongoose";
+import User from "../models/user.model.js";
+
+import {
+  sendOrderConfirmationEmail,
+  sendOrderShippedEmail,
+  sendOrderDeliveredEmail,
+  sendOrderCancelledEmail,
+} from "../services/email.services.js";
 
 // Place order
 export const placeOrder = async (req, res) => {
@@ -63,6 +72,18 @@ export const placeOrder = async (req, res) => {
     cart.totalPrice = 0;
 
     await cart.save();
+
+    // Send confirmation email after successful order placement
+    try {
+      await sendOrderConfirmationEmail(
+        req.user.email,
+        req.user.fullName,
+        order._id,
+        order.totalPrice,
+      );
+    } catch (error) {
+      console.error("Order confirmation email failed:", error);
+    }
 
     // Return created order
     return res.status(201).json({
@@ -233,6 +254,17 @@ export const cancelOrder = async (req, res) => {
     // Save order
     await order.save();
 
+    // Send order cancelled email to the customer
+    try {
+      await sendOrderCancelledEmail(
+        req.user.email,
+        req.user.fullName,
+        order._id,
+      );
+    } catch (error) {
+      console.error("Order cancelled email failed:", error);
+    }
+
     // Return response
     return res.status(200).json({
       success: true,
@@ -286,10 +318,12 @@ export const getAllOrders = async (req, res) => {
   }
 };
 
+// updateOrderStatus
 // Admin - Update order status
 export const updateOrderStatus = async (req, res) => {
   try {
     // Logic started
+
     // Get order ID from URL
     const { orderId } = req.params;
 
@@ -315,11 +349,90 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
+    // Check whether order is already cancelled
+    if (order.orderStatus === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled orders cannot be updated",
+      });
+    }
+
+    // Check whether the order status is valid
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Shipped",
+      "Delivered",
+      "Cancelled",
+    ];
+
+    if (!allowedStatuses.includes(orderStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order status",
+      });
+    }
+
+    // Check whether the order status transition is valid
+    const validTransitions = {
+      Pending: ["Processing", "Cancelled"],
+      Processing: ["Shipped", "Cancelled"],
+      Shipped: ["Delivered"],
+      Delivered: [],
+      Cancelled: [],
+    };
+
+    if (!validTransitions[order.orderStatus].includes(orderStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot change order status from ${order.orderStatus} to ${orderStatus}`,
+      });
+    }
+
     // Update order status
     order.orderStatus = orderStatus;
 
     // Save order
     await order.save();
+
+    // Send email notification based on the updated order status
+    if (order.orderStatus === "Shipped" || order.orderStatus === "Delivered") {
+      // Find customer for email notification
+      const customer = await User.findById(order.user);
+
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      // Send shipped email
+      if (order.orderStatus === "Shipped") {
+        try {
+          await sendOrderShippedEmail(
+            customer.email,
+            customer.fullName,
+            order._id,
+          );
+        } catch (error) {
+          console.error("Order shipped email failed:", error);
+        }
+      }
+
+      // Send delivered email
+      if (order.orderStatus === "Delivered") {
+        try {
+          await sendOrderDeliveredEmail(
+            customer.email,
+            customer.fullName,
+            order._id,
+          );
+        } catch (error) {
+          console.error("Order delivered email failed:", error);
+        }
+      }
+    }
 
     // Return updated order
     return res.status(200).json({
