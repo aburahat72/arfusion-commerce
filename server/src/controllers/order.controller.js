@@ -392,9 +392,6 @@ export const updateOrderStatus = async (req, res) => {
     // Update order status
     order.orderStatus = orderStatus;
 
-    // Save order
-    await order.save();
-
     // Send email notification based on the updated order status
     if (order.orderStatus === "Shipped" || order.orderStatus === "Delivered") {
       // Find customer for email notification
@@ -422,6 +419,11 @@ export const updateOrderStatus = async (req, res) => {
 
       // Send delivered email
       if (order.orderStatus === "Delivered") {
+        // Customer can return the order within 7 days
+        order.returnEligibleUntil = new Date(
+          Date.now() + 7 * 24 * 60 * 60 * 1000,
+        );
+
         try {
           await sendOrderDeliveredEmail(
             customer.email,
@@ -433,6 +435,9 @@ export const updateOrderStatus = async (req, res) => {
         }
       }
     }
+
+    // Save order AFTER all updates
+    await order.save();
 
     // Return updated order
     return res.status(200).json({
