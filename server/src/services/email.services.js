@@ -7,6 +7,13 @@ import orderShipped from "../templates/orderShipped.js";
 import orderDelivered from "../templates/orderDelivered.js";
 import orderCancelled from "../templates/orderCancelled.js";
 
+// All returns imports templates
+import returnRequested from "../templates/returnRequested.js";
+import returnApproved from "../templates/returnApproved.js";
+import returnRejected from "../templates/returnRejected.js";
+import refundCompleted from "../templates/refundCompleted.js";
+import replacementShipped from "../templates/replacementShipped.js";
+
 // Send Email
 const sendEmail = async ({ to, subject, html }) => {
   try {
@@ -94,5 +101,83 @@ export const sendOrderCancelledEmail = async (email, name, orderId) => {
     to: email,
     subject,
     html: orderCancelled(name, orderId),
+  });
+};
+
+// All returns emails are handled below
+// Return Requested Email
+export const sendReturnRequestedEmail = async (
+  email,
+  name,
+  orderId,
+  requestType,
+) => {
+  const subject = "Return Request Received";
+
+  return sendEmail({
+    to: email,
+    subject,
+    html: returnRequested(name, orderId, requestType),
+  });
+};
+
+// Return Approved Email
+export const sendReturnApprovedEmail = async (
+  email,
+  name,
+  orderId,
+) => {
+  const subject = "Return Request Approved";
+
+  return sendEmail({
+    to: email,
+    subject,
+    html: returnApproved(name, orderId),
+  });
+};
+
+// Return Rejected Email
+export const sendReturnRejectedEmail = async (
+  email,
+  name,
+  orderId,
+) => {
+  const subject = "Return Request Rejected";
+
+  return sendEmail({
+    to: email,
+    subject,
+    html: returnRejected(name, orderId),
+  });
+};
+
+// Refund Completed Email
+export const sendRefundCompletedEmail = async (
+  email,
+  name,
+  orderId,
+  amount,
+) => {
+  const subject = "Refund Completed";
+
+  return sendEmail({
+    to: email,
+    subject,
+    html: refundCompleted(name, orderId, amount),
+  });
+};
+
+// Replacement Shipped Email
+export const sendReplacementShippedEmail = async (
+  email,
+  name,
+  orderId,
+) => {
+  const subject = "Replacement Shipped";
+
+  return sendEmail({
+    to: email,
+    subject,
+    html: replacementShipped(name, orderId),
   });
 };

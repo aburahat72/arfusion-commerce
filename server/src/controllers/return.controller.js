@@ -3,14 +3,15 @@ import mongoose from "mongoose";
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
+import InventoryLog from "../models/inventoryLog.model.js";
 
-// import {
-//   sendReturnRequestedEmail,
-//   sendReturnApprovedEmail,
-//   sendReturnRejectedEmail,
-//   sendRefundCompletedEmail,
-//   sendReplacementShippedEmail,
-// } from "../services/email.services.js";
+import {
+  sendReturnRequestedEmail,
+  sendReturnApprovedEmail,
+  sendReturnRejectedEmail,
+  sendRefundCompletedEmail,
+  sendReplacementShippedEmail,
+} from "../services/email.services.js";
 
 // requestReturn
 // Customer - Request return
@@ -91,19 +92,16 @@ export const requestReturn = async (req, res) => {
     await order.save();
 
     // Send return request email
-    // Uncomment after creating email service
-    /*
-try {
-  await sendReturnRequestedEmail(
-    req.user.email,
-    req.user.fullName,
-    order._id,
-    requestType
-  );
-} catch (error) {
-  console.error("Return request email failed:", error);
-}
-*/
+    try {
+      await sendReturnRequestedEmail(
+        req.user.email,
+        req.user.fullName,
+        order._id,
+        requestType,
+      );
+    } catch (error) {
+      console.error("Return request email failed:", error);
+    }
 
     // Return response
     return res.status(200).json({
@@ -261,19 +259,16 @@ export const approveReturn = async (req, res) => {
     }
 
     // Send return approved email
-    /* Uncomment after creating email service
 
-try {
-  await sendReturnApprovedEmail(
-    customer.email,
-    customer.fullName,
-    order._id,
-  );
-} catch (error) {
-  console.error("Return approved email failed:", error);
-}
-
-*/
+    try {
+      await sendReturnApprovedEmail(
+        customer.email,
+        customer.fullName,
+        order._id,
+      );
+    } catch (error) {
+      console.error("Return approved email failed:", error);
+    }
 
     // Return response
     return res.status(200).json({
@@ -349,19 +344,15 @@ export const rejectReturn = async (req, res) => {
     }
 
     // Send return rejected email
-    /* Uncomment after creating email service
-
-try {
-  await sendReturnRejectedEmail(
-    customer.email,
-    customer.fullName,
-    order._id,
-  );
-} catch (error) {
-  console.error("Return rejected email failed:", error);
-}
-
-*/
+    try {
+      await sendReturnRejectedEmail(
+        customer.email,
+        customer.fullName,
+        order._id,
+      );
+    } catch (error) {
+      console.error("Return rejected email failed:", error);
+    }
 
     // Return response
     return res.status(200).json({
@@ -436,10 +427,37 @@ export const completeRefund = async (req, res) => {
 
     // Restore product stock
     for (const item of order.items) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: {
-          stock: item.quantity,
-        },
+      // Find product
+      const product = await Product.findById(item.product);
+
+      // Check whether product exists
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      // Store previous stock
+      const previousStock = product.stock;
+
+      // Restore stock
+      product.stock += item.quantity;
+
+      // Activate product
+      product.isActive = true;
+
+      // Save product
+      await product.save();
+
+      // Create inventory log
+      await InventoryLog.create({
+        product: product._id,
+        previousStock,
+        newStock: product.stock,
+        quantityChanged: item.quantity,
+        action: "Refund",
+        updatedBy: req.user._id,
       });
     }
 
@@ -458,20 +476,16 @@ export const completeRefund = async (req, res) => {
     }
 
     // Send refund completed email
-    /* Uncomment after creating email service
-
-try {
-  await sendRefundCompletedEmail(
-    customer.email,
-    customer.fullName,
-    order._id,
-    order.totalPrice,
-  );
-} catch (error) {
-  console.error("Refund completed email failed:", error);
-}
-
-*/
+    try {
+      await sendRefundCompletedEmail(
+        customer.email,
+        customer.fullName,
+        order._id,
+        order.totalPrice,
+      );
+    } catch (error) {
+      console.error("Refund completed email failed:", error);
+    }
 
     // Return response
     return res.status(200).json({
@@ -551,12 +565,46 @@ export const completeReplacement = async (req, res) => {
       }
     }
 
-    // Reduce stock for replacement
+    // Reduce replacement stock
     for (const item of order.items) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: {
-          stock: -item.quantity,
-        },
+      // Find product
+      const product = await Product.findById(item.product);
+
+      // Check whether product exists
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      // Store previous stock
+      const previousStock = product.stock;
+
+      // Reduce stock
+      product.stock -= item.quantity;
+
+      // Prevent negative stock
+      if (product.stock < 0) {
+        product.stock = 0;
+      }
+
+      // Deactivate if stock becomes zero
+      if (product.stock === 0) {
+        product.isActive = false;
+      }
+
+      // Save product
+      await product.save();
+
+      // Create inventory log
+      await InventoryLog.create({
+        product: product._id,
+        previousStock,
+        newStock: product.stock,
+        quantityChanged: item.quantity,
+        action: "Replacement",
+        updatedBy: req.user._id,
       });
     }
 
@@ -579,19 +627,15 @@ export const completeReplacement = async (req, res) => {
     }
 
     // Send replacement shipped email
-    /* Uncomment after creating email service
-
-try {
-  await sendReplacementShippedEmail(
-    customer.email,
-    customer.fullName,
-    order._id,
-  );
-} catch (error) {
-  console.error("Replacement shipped email failed:", error);
-}
-
-*/
+    try {
+      await sendReplacementShippedEmail(
+        customer.email,
+        customer.fullName,
+        order._id,
+      );
+    } catch (error) {
+      console.error("Replacement shipped email failed:", error);
+    }
 
     // Return response
     return res.status(200).json({

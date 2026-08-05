@@ -4,6 +4,7 @@ import Order from "../models/order.model.js";
 import Cart from "../models/cart.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
+import InventoryLog from "../models/inventoryLog.model.js";
 
 import {
   sendOrderConfirmationEmail,
@@ -12,10 +13,22 @@ import {
   sendOrderCancelledEmail,
 } from "../services/email.services.js";
 
+import {
+  notifyNewOrder,
+  notifyOrderCancelled,
+  notifyOrderShipped,
+  notifyOrderDelivered,
+} from "../services/notification.services.js";
+
 // Place order
 export const placeOrder = async (req, res) => {
+  // Start MongoDB session
+  const session = await mongoose.startSession();
+
   try {
-    // Logic started
+    // Start transaction
+    session.startTransaction();
+
     // Get logged-in user ID
     const userId = req.user._id;
 
@@ -25,19 +38,37 @@ export const placeOrder = async (req, res) => {
     // Find user's cart
     const cart = await Cart.findOne({
       user: userId,
-    }).populate("items.product");
+    })
+      .populate("items.product")
+      .session(session);
 
     // Check whether cart exists or is empty
     if (!cart || cart.items.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
+
       return res.status(400).json({
         success: false,
         message: "Cart is empty",
       });
     }
 
-    // Check product stock before placing order
+    // Validate stock availability
     for (const item of cart.items) {
+      if (!item.product) {
+        await session.abortTransaction();
+        session.endSession();
+
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
       if (item.quantity > item.product.stock) {
+        await session.abortTransaction();
+        session.endSession();
+
         return res.status(400).json({
           success: false,
           message: `${item.product.name} is out of stock`,
@@ -46,34 +77,84 @@ export const placeOrder = async (req, res) => {
     }
 
     // Create new order
-    const order = await Order.create({
-      user: userId,
-      items: cart.items.map((item) => ({
-        product: item.product._id,
-        quantity: item.quantity,
-        price: item.price,
-      })),
-      totalPrice: cart.totalPrice,
-      shippingAddress,
-      paymentMethod,
-    });
+    const [order] = await Order.create(
+      [
+        {
+          user: userId,
+          items: cart.items.map((item) => ({
+            product: item.product._id,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          totalPrice: cart.totalPrice,
+          shippingAddress,
+          paymentMethod,
+        },
+      ],
+      { session },
+    );
 
-    // Update product stock
+    // Prepare bulk product updates
+    const bulkUpdates = [];
+
+    // Prepare inventory logs
+    const inventoryLogs = [];
+
+    // Loop through ordered products
     for (const item of cart.items) {
-      await Product.findByIdAndUpdate(item.product._id, {
-        $inc: {
-          stock: -item.quantity,
+      const previousStock = item.product.stock;
+      const newStock = Math.max(previousStock - item.quantity, 0);
+
+      bulkUpdates.push({
+        updateOne: {
+          filter: {
+            _id: item.product._id,
+          },
+          update: {
+            $set: {
+              stock: newStock,
+              isActive: newStock > 0,
+            },
+          },
         },
       });
+
+      inventoryLogs.push({
+        product: item.product._id,
+        previousStock,
+        newStock,
+        quantityChanged: item.quantity,
+        action: "Order Placed",
+        updatedBy: userId,
+      });
     }
+
+    // Update all product stocks in a single database operation
+    await Product.bulkWrite(bulkUpdates, {
+      session,
+    });
+
+    // Create inventory logs in a single database operation
+    await InventoryLog.insertMany(inventoryLogs, {
+      session,
+    });
 
     // Clear user's cart
     cart.items = [];
     cart.totalPrice = 0;
 
-    await cart.save();
+    // Save updated cart
+    await cart.save({
+      session,
+    });
 
-    // Send confirmation email after successful order placement
+    // Commit transaction
+    await session.commitTransaction();
+
+    // End MongoDB session
+    session.endSession();
+
+    // Send confirmation email
     try {
       await sendOrderConfirmationEmail(
         req.user.email,
@@ -85,6 +166,13 @@ export const placeOrder = async (req, res) => {
       console.error("Order confirmation email failed:", error);
     }
 
+    // Notify admin about new order
+    try {
+      await notifyNewOrder(order, req.user);
+    } catch (error) {
+      console.error("New order notification failed:", error);
+    }
+
     // Return created order
     return res.status(201).json({
       success: true,
@@ -92,6 +180,12 @@ export const placeOrder = async (req, res) => {
       order,
     });
   } catch (error) {
+    // Rollback transaction if any operation fails
+    await session.abortTransaction();
+
+    // End MongoDB session
+    session.endSession();
+
     console.error("Place Order Error:", error);
 
     return res.status(500).json({
@@ -109,20 +203,39 @@ export const getMyOrders = async (req, res) => {
     // Get logged-in user ID
     const userId = req.user._id;
 
-    // Find all orders of the logged-in user
-    const orders = await Order.find({
-      user: userId,
-    })
-      .populate("items.product")
-      .sort({
-        createdAt: -1,
-      });
+    // Get pagination query parameters
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+
+    // Calculate documents to skip
+    const skip = (page - 1) * limit;
+
+    // Fetch orders and total order count simultaneously
+    const [orders, totalOrders] = await Promise.all([
+      Order.find({
+        user: userId,
+      })
+        .populate("items.product", "name images price category brand")
+        .sort({
+          createdAt: -1,
+        })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Order.countDocuments({
+        user: userId,
+      }),
+    ]);
 
     // Check whether user has any orders
-    if (orders.length === 0) {
+    if (totalOrders === 0) {
       return res.status(200).json({
         success: true,
         message: "No orders found",
+        totalOrders: 0,
+        currentPage: page,
+        totalPages: 0,
         orders: [],
       });
     }
@@ -130,7 +243,10 @@ export const getMyOrders = async (req, res) => {
     // Return user's orders
     return res.status(200).json({
       success: true,
-      count: orders.length,
+      totalOrders,
+      currentPage: page,
+      totalPages: Math.ceil(totalOrders / limit),
+      limit,
       orders,
     });
   } catch (error) {
@@ -143,8 +259,8 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// getOrderById;
-// Get single order
+// getOrderById
+// Get a single order by ID
 export const getOrderById = async (req, res) => {
   try {
     // Logic started
@@ -162,11 +278,13 @@ export const getOrderById = async (req, res) => {
       });
     }
 
-    // Find order
+    // Find user's order
     const order = await Order.findOne({
       _id: orderId,
       user: userId,
-    }).populate("items.product");
+    })
+      .populate("items.product", "name images price category brand stock")
+      .lean();
 
     // Check whether order exists
     if (!order) {
@@ -193,6 +311,8 @@ export const getOrderById = async (req, res) => {
 
 // Cancel order
 export const cancelOrder = async (req, res) => {
+  // Start MongoDB session
+  const session = await mongoose.startSession();
   try {
     // Logic started
     // Get logged-in user ID
@@ -209,14 +329,18 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
+    // Start transaction
+    session.startTransaction();
+
     // Find user's order
     const order = await Order.findOne({
       _id: orderId,
       user: userId,
-    });
+    }).session(session);
 
     // Check whether order exists
     if (!order) {
+      await session.abortTransaction();
       return res.status(404).json({
         success: false,
         message: "Order not found",
@@ -225,6 +349,7 @@ export const cancelOrder = async (req, res) => {
 
     // Check whether order is already cancelled
     if (order.orderStatus === "Cancelled") {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "Order is already cancelled",
@@ -233,26 +358,100 @@ export const cancelOrder = async (req, res) => {
 
     // Prevent cancellation after shipping
     if (order.orderStatus === "Shipped" || order.orderStatus === "Delivered") {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
         message: "This order cannot be cancelled",
       });
     }
 
+    // Prepare bulk product updates
+    const bulkUpdates = [];
+    const inventoryLogs = [];
+
+    // Collect all ordered product IDs
+    const productIds = order.items.map((item) => item.product);
+
+    // Fetch all ordered products
+    const products = await Product.find({
+      _id: { $in: productIds },
+    }).session(session);
+
+    const productMap = new Map(
+      products.map((product) => [product._id.toString(), product]),
+    );
+
     // Restore product stock
     for (const item of order.items) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: {
-          stock: item.quantity,
+      // Find product using the product map instead of querying the database again
+      const product = productMap.get(item.product.toString());
+
+      // Check whether product exists
+      if (!product) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          success: false,
+          message: "Product not found",
+        });
+      }
+
+      // Store previous stock
+      const previousStock = product.stock;
+
+      // Update product object
+      product.stock += item.quantity;
+
+      // Reactivate product
+      if (product.stock > 0) {
+        product.isActive = true;
+      }
+
+      // Don't save yet
+      bulkUpdates.push({
+        updateOne: {
+          filter: {
+            _id: product._id,
+          },
+          update: {
+            $set: {
+              stock: product.stock,
+              isActive: product.isActive,
+            },
+          },
         },
       });
+
+      // Save updated product
+      // await product.save({ session });
+
+      // Create inventory log
+      inventoryLogs.push({
+        product: product._id,
+        previousStock,
+        newStock: product.stock,
+        quantityChanged: item.quantity,
+        action: "Order Cancelled",
+        updatedBy: userId,
+      });
     }
+
+    await Product.bulkWrite(bulkUpdates, {
+      session,
+    });
+
+    // Create inventory logs in a single database operation
+    await InventoryLog.insertMany(inventoryLogs, {
+      session,
+    });
 
     // Update order status
     order.orderStatus = "Cancelled";
 
     // Save order
-    await order.save();
+    await order.save({ session });
+
+    // Commit transaction
+    await session.commitTransaction();
 
     // Send order cancelled email to the customer
     try {
@@ -265,6 +464,13 @@ export const cancelOrder = async (req, res) => {
       console.error("Order cancelled email failed:", error);
     }
 
+    // Notify admin about order cancellation
+    try {
+      await notifyOrderCancelled(order, req.user);
+    } catch (error) {
+      console.error("Order cancelled notification failed:", error);
+    }
+
     // Return response
     return res.status(200).json({
       success: true,
@@ -272,12 +478,18 @@ export const cancelOrder = async (req, res) => {
       order,
     });
   } catch (error) {
+    // Rollback transaction
+    await session.abortTransaction();
+
     console.error("Cancel Order Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Internal server error",
     });
+  } finally {
+    // End MongoDB session
+    session.endSession();
   }
 };
 
@@ -285,19 +497,38 @@ export const cancelOrder = async (req, res) => {
 export const getAllOrders = async (req, res) => {
   try {
     // Logic started
-    // Find all orders
-    const orders = await Order.find()
-      .populate("user", "fullName email")
-      .populate("items.product")
-      .sort({
-        createdAt: -1,
-      });
+
+    // Get pagination query parameters
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+
+    // Calculate documents to skip
+    const skip = (page - 1) * limit;
+
+    // Fetch orders and total order count simultaneously
+    const [orders, totalOrders] = await Promise.all([
+      Order.find()
+        .populate("user", "fullName email")
+        .populate("items.product", "name images price category brand")
+        .sort({
+          createdAt: -1,
+        })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Order.countDocuments(),
+    ]);
 
     // Check whether any orders exist
-    if (orders.length === 0) {
+    if (totalOrders === 0) {
       return res.status(200).json({
         success: true,
         message: "No orders found",
+        totalOrders: 0,
+        currentPage: page,
+        totalPages: 0,
+        limit,
         orders: [],
       });
     }
@@ -305,7 +536,10 @@ export const getAllOrders = async (req, res) => {
     // Return all orders
     return res.status(200).json({
       success: true,
-      count: orders.length,
+      totalOrders,
+      currentPage: page,
+      totalPages: Math.ceil(totalOrders / limit),
+      limit,
       orders,
     });
   } catch (error) {
@@ -322,8 +556,6 @@ export const getAllOrders = async (req, res) => {
 // Admin - Update order status
 export const updateOrderStatus = async (req, res) => {
   try {
-    // Logic started
-
     // Get order ID from URL
     const { orderId } = req.params;
 
@@ -357,7 +589,7 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Check whether the order status is valid
+    // Allowed statuses
     const allowedStatuses = [
       "Pending",
       "Processing",
@@ -373,7 +605,7 @@ export const updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Check whether the order status transition is valid
+    // Valid status transitions
     const validTransitions = {
       Pending: ["Processing", "Cancelled"],
       Processing: ["Shipped", "Cancelled"],
@@ -392,10 +624,20 @@ export const updateOrderStatus = async (req, res) => {
     // Update order status
     order.orderStatus = orderStatus;
 
-    // Send email notification based on the updated order status
-    if (order.orderStatus === "Shipped" || order.orderStatus === "Delivered") {
-      // Find customer for email notification
-      const customer = await User.findById(order.user);
+    // Customer can return the order within 7 days
+    if (orderStatus === "Delivered") {
+      order.returnEligibleUntil = new Date(
+        Date.now() + 7 * 24 * 60 * 60 * 1000,
+      );
+    }
+
+    // Save updated order
+    await order.save();
+
+    // Send email notifications only for shipped and delivered orders
+    if (orderStatus === "Shipped" || orderStatus === "Delivered") {
+      // Fetch customer details
+      const customer = await User.findById(order.user).select("email fullName");
 
       if (!customer) {
         return res.status(404).json({
@@ -404,8 +646,8 @@ export const updateOrderStatus = async (req, res) => {
         });
       }
 
-      // Send shipped email
-      if (order.orderStatus === "Shipped") {
+      // Shipped notification
+      if (orderStatus === "Shipped") {
         try {
           await sendOrderShippedEmail(
             customer.email,
@@ -415,15 +657,16 @@ export const updateOrderStatus = async (req, res) => {
         } catch (error) {
           console.error("Order shipped email failed:", error);
         }
+
+        try {
+          await notifyOrderShipped(order, customer);
+        } catch (error) {
+          console.error("Order shipped notification failed:", error);
+        }
       }
 
-      // Send delivered email
-      if (order.orderStatus === "Delivered") {
-        // Customer can return the order within 7 days
-        order.returnEligibleUntil = new Date(
-          Date.now() + 7 * 24 * 60 * 60 * 1000,
-        );
-
+      // Delivered notification
+      if (orderStatus === "Delivered") {
         try {
           await sendOrderDeliveredEmail(
             customer.email,
@@ -433,13 +676,15 @@ export const updateOrderStatus = async (req, res) => {
         } catch (error) {
           console.error("Order delivered email failed:", error);
         }
+
+        try {
+          await notifyOrderDelivered(order, customer);
+        } catch (error) {
+          console.error("Order delivered notification failed:", error);
+        }
       }
     }
 
-    // Save order AFTER all updates
-    await order.save();
-
-    // Return updated order
     return res.status(200).json({
       success: true,
       message: "Order status updated successfully",

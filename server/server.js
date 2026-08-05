@@ -17,6 +17,8 @@ import couponRoutes from "./src/routes/coupon.routes.js";
 import dashboardRoutes from "./src/routes/dashboard.routes.js";
 import analyticsRoutes from "./src/routes/analytics.routes.js";
 import returnRoutes from "./src/routes/return.routes.js";
+import inventoryRoutes from "./src/routes/inventory.routes.js";
+import notificationRoutes from "./src/routes/notification.routes.js";
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/returns", returnRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // admin dashboard routes
 app.use("/api/dashboard", dashboardRoutes);
