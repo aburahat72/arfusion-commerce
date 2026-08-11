@@ -1,9 +1,18 @@
 import express from "express";
-import { createProduct, getAllProducts, getProductById, updateProduct, deleteProduct } from "../controllers/product.controller.js";
+import {
+  createProduct,
+  getAllProducts,
+  getProductById,
+  updateProduct,
+  deleteProduct,
+} from "../controllers/product.controller.js";
 import { protectedRoute, authorize } from "../middleware/auth.middleware.js";
 import validate from "../middleware/validate.middleware.js";
-import { createProductSchema, updateProductSchema } from "../validations/product.validation.js";
-
+import {
+  createProductSchema,
+  updateProductSchema,
+} from "../validations/product.validation.js";
+import upload from "../middleware/upload.middleware.js";
 const router = express.Router();
 
 // Get all active products - Public (product routes)
@@ -17,6 +26,7 @@ router.post(
   "/",
   protectedRoute,
   authorize("admin"),
+  upload.array("images", 5),
   validate(createProductSchema),
   createProduct,
 );
@@ -26,17 +36,12 @@ router.patch(
   "/:id",
   protectedRoute,
   authorize("admin"),
+  upload.array("images", 5),
   validate(updateProductSchema),
   updateProduct,
 );
 
 // Delete product - Admin only
-router.delete(
-  "/:id",
-  protectedRoute,
-  authorize("admin"),
-  deleteProduct,
-);
+router.delete("/:id", protectedRoute, authorize("admin"), deleteProduct);
 
 export default router;
-

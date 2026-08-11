@@ -1,18 +1,43 @@
-import Product from "../models/product.model.js";
 import mongoose from "mongoose";
+
+import cloudinary from "../config/cloudinary.js";
+import Product from "../models/product.model.js";
+import { uploadToCloudinary } from "../../utils/cloudinaryUpload.js";
 
 // Create Product - Admin only
 export const createProduct = async (req, res) => {
-  try {
-    const { name, description, price, stock, category, images } = req.body;
+  const uploadedImages = [];
 
+  try {
+    const { name, description, price, stock, category, isActive } = req.body;
+
+    // Check if images were uploaded
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one image is required",
+      });
+    }
+
+    // Upload images to Cloudinary
+    for (const file of req.files) {
+      const result = await uploadToCloudinary(file.buffer, "arfusion/products");
+
+      uploadedImages.push({
+        url: result.secure_url,
+        publicId: result.public_id,
+      });
+    }
+
+    // Create product in MongoDB
     const product = await Product.create({
       name,
       description,
       price,
       stock,
       category,
-      images,
+      images: uploadedImages,
+      ...(isActive !== undefined && { isActive }),
     });
 
     return res.status(201).json({
@@ -22,6 +47,15 @@ export const createProduct = async (req, res) => {
     });
   } catch (error) {
     console.error("Create Product Error:", error);
+
+    // Rollback Cloudinary uploads if product creation fails
+    if (uploadedImages.length > 0) {
+      await Promise.allSettled(
+        uploadedImages.map((image) =>
+          cloudinary.uploader.destroy(image.publicId),
+        ),
+      );
+    }
 
     return res.status(500).json({
       success: false,
@@ -214,10 +248,14 @@ export const getProductById = async (req, res) => {
 };
 
 // Update product by ID - Admin only
+// Update product by ID - Admin only
 export const updateProduct = async (req, res) => {
+  const uploadedImages = [];
+
   try {
     // Get product ID from URL parameters
     const { id } = req.params;
+
     // Check whether ID is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -226,13 +264,9 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    // Find product and update it with validated request data
-    const product = await Product.findByIdAndUpdate(id, req.body, {
-      returnDocument: "after",
-      runValidators: true,
-    });
+    // Find existing product
+    const product = await Product.findById(id);
 
-    // Check if product exists
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -240,14 +274,89 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    // Return updated product
+    // Get validated fields from request body
+    const {
+      name,
+      description,
+      price,
+      stock,
+      category,
+      isActive,
+    } = req.body;
+
+    // Prepare fields to update
+    const updateData = {};
+
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (price !== undefined) updateData.price = price;
+    if (stock !== undefined) updateData.stock = stock;
+    if (category !== undefined) updateData.category = category;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    // Keep old images before replacing them
+    const oldImages = product.images || [];
+
+    // Check if new images were uploaded
+    if (req.files && req.files.length > 0) {
+      // Upload new images to Cloudinary
+      for (const file of req.files) {
+        const result = await uploadToCloudinary(
+          file.buffer,
+          "arfusion/products"
+        );
+
+        uploadedImages.push({
+          url: result.secure_url,
+          publicId: result.public_id,
+        });
+      }
+
+      // Replace old images with new images
+      updateData.images = uploadedImages;
+    }
+
+    // Update MongoDB FIRST
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    // If MongoDB update somehow failed
+    if (!updatedProduct) {
+      throw new Error("Product update failed");
+    }
+
+    // MongoDB update succeeded.
+    // Now delete old images from Cloudinary.
+    if (req.files && req.files.length > 0 && oldImages.length > 0) {
+      await Promise.allSettled(
+        oldImages.map((image) =>
+          cloudinary.uploader.destroy(image.publicId)
+        )
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "Product updated successfully",
-      product,
+      product: updatedProduct,
     });
   } catch (error) {
     console.error("Update Product Error:", error);
+
+    // Rollback newly uploaded images if update failed
+    if (uploadedImages.length > 0) {
+      await Promise.allSettled(
+        uploadedImages.map((image) =>
+          cloudinary.uploader.destroy(image.publicId)
+        )
+      );
+    }
 
     return res.status(500).json({
       success: false,
@@ -270,8 +379,8 @@ export const deleteProduct = async (req, res) => {
       });
     }
 
-    // Find and delete product
-    const product = await Product.findByIdAndDelete(id);
+    // Find product first so we can get its Cloudinary images
+    const product = await Product.findById(id);
 
     // Check if product exists
     if (!product) {
@@ -280,6 +389,18 @@ export const deleteProduct = async (req, res) => {
         message: "Product not found",
       });
     }
+
+    // Delete product images from Cloudinary
+    if (product.images && product.images.length > 0) {
+      await Promise.allSettled(
+        product.images.map((image) =>
+          cloudinary.uploader.destroy(image.publicId),
+        ),
+      );
+    }
+
+    // Delete product from MongoDB
+    await Product.findByIdAndDelete(id);
 
     // Return success response
     return res.status(200).json({

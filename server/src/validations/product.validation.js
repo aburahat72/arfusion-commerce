@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// Create Product Validation
 export const createProductSchema = z.object({
   name: z
     .string()
@@ -11,32 +12,34 @@ export const createProductSchema = z.object({
     .string()
     .trim()
     .min(1, "Product description is required")
-    .max(2000, "Description cannot exceed 2000 characters"),
+    .max(2000, "Product description cannot exceed 2000 characters"),
 
-  price: z.number().min(0, "Price cannot be negative"),
+  price: z.coerce
+    .number()
+    .min(0, "Price cannot be negative"),
 
-  stock: z
+  stock: z.coerce
     .number()
     .int("Stock must be a whole number")
     .min(0, "Stock cannot be negative"),
 
-  category: z.string().trim().min(1, "Category is required"),
+  category: z
+    .string()
+    .trim()
+    .min(1, "Category is required"),
 
-  images: z.array(z.string()).optional(),
+  isActive: z.preprocess(
+    (value) => {
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return value;
+    },
+    z.boolean().optional()
+  ),
 });
 
-// Update Product Validation Schema
-// Used when an admin updates an existing product.
-//
-// All fields are optional because the admin may update only one
-// or a few fields instead of sending the entire product again.
-//
-// Example:
-// PATCH /api/products/:id
-// Body: { price: 499 }
-//
-// Only the provided fields are validated.
-// Fields that are not provided remain unchanged in the database.
+
+// Update Product Validation
 export const updateProductSchema = z.object({
   name: z
     .string()
@@ -49,22 +52,33 @@ export const updateProductSchema = z.object({
     .string()
     .trim()
     .min(1, "Product description is required")
-    .max(2000, "Description cannot exceed 2000 characters")
+    .max(2000, "Product description cannot exceed 2000 characters")
     .optional(),
 
-  price: z.number().min(0, "Price cannot be negative").optional(),
+  price: z.coerce
+    .number()
+    .min(0, "Price cannot be negative")
+    .optional(),
 
-  stock: z
+  stock: z.coerce
     .number()
     .int("Stock must be a whole number")
     .min(0, "Stock cannot be negative")
     .optional(),
 
-  category: z.string().trim().min(1, "Category is required").optional(),
+  category: z
+    .string()
+    .trim()
+    .min(1, "Category is required")
+    .optional(),
 
-  images: z.array(z.string()).optional(),
-
-  // Allows admin to activate/deactivate a product
-  // without permanently deleting it.
-  isActive: z.boolean().optional(),
+  isActive: z.preprocess(
+    (value) => {
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return value;
+    },
+    z.boolean().optional()
+  ),
 });
+

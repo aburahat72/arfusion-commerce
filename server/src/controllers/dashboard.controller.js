@@ -45,6 +45,10 @@ export const getDashboardStats = async (req, res) => {
       orderStatus: "Processing",
     });
 
+    const shippedOrders = await Order.countDocuments({
+      orderStatus: "Shipped",
+    });
+
     const deliveredOrders = await Order.countDocuments({
       orderStatus: "Delivered",
     });
@@ -111,6 +115,7 @@ export const getDashboardStats = async (req, res) => {
         lowStockProducts,
         recentOrders,
         topSellingProducts,
+        shippedOrders,
       },
     });
   } catch (error) {
