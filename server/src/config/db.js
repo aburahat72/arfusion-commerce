@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
 
+// Enable Mongoose query filter sanitization
+// Helps protect queries from MongoDB operator injection.
+mongoose.set("sanitizeFilter", true);
+
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI);

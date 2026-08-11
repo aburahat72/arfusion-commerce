@@ -1,9 +1,16 @@
+import helmet from "helmet";
+import cors from "cors";
+import compression from "compression";
+import morgan from "morgan";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 import express from "express";
 import connectDB from "./src/config/db.js";
+
+// API rate limiter middleware
+import { apiLimiter } from "./src/middleware/rateLimit.middleware.js";
 
 import authRoutes from "./src/routes/auth.routes.js";
 import productRoutes from "./src/routes/product.routes.js";
@@ -22,9 +29,33 @@ import notificationRoutes from "./src/routes/notification.routes.js";
 
 const app = express();
 
-// Middleware
+// Security middleware
+app.use(helmet());
+
+// CORS
+// CORS configuration
+// Allows the frontend application to communicate with this backend.
+// The allowed frontend URL is stored in the environment variables.
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  }),
+);
+
+// Body parsers
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Response compression
+// Compresses API responses to reduce response size and improve network performance.
+app.use(compression());
+
+// HTTP request logging
+app.use(morgan("dev"));
+
+// Global API rate limiter
+app.use("/api", apiLimiter);
 
 // Routes
 app.use("/api/auth", authRoutes);
