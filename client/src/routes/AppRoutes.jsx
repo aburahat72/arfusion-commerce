@@ -10,6 +10,8 @@ import ProductDetails from "../pages/Products/ProductDetails";
 import Cart from "../pages/Cart/Cart";
 import Checkout from "../pages/Checkout/Checkout";
 import OrderSuccess from "../pages/OrderSuccess/OrderSuccess";
+import Wishlist from "../pages/Wishlist/Wishlist";
+import Compare from "../pages/Compare/Compare";
 
 function Login() {
   return <h1>Login Page</h1>;
@@ -23,7 +25,10 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Customer */}
+        {/* =================================================
+            CUSTOMER ROUTES
+        ================================================= */}
+
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
 
@@ -33,17 +38,27 @@ function AppRoutes() {
 
           <Route path="/cart" element={<Cart />} />
 
+          <Route path="/wishlist" element={<Wishlist />} />
+
+          <Route path="/compare" element={<Compare />} />
+
           <Route path="/checkout" element={<Checkout />} />
 
           <Route path="/order-success" element={<OrderSuccess />} />
         </Route>
 
-        {/* Authentication */}
+        {/* =================================================
+            AUTHENTICATION ROUTES
+        ================================================= */}
+
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
         </Route>
 
-        {/* Admin */}
+        {/* =================================================
+            ADMIN ROUTES
+        ================================================= */}
+
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AdminDashboard />} />
         </Route>

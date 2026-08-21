@@ -1,10 +1,19 @@
-import { Heart, Minus, Plus, ShoppingCart, Zap } from "lucide-react";
+import {
+  GitCompareArrows,
+  Heart,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import { addToCart } from "../../store/slices/cartSlice";
 import { startBuyNow } from "../../store/slices/checkoutSlice";
+import { toggleWishlist } from "../../store/slices/wishlistSlice";
+import { toggleCompare } from "../../store/slices/compareSlice";
 
 import Button from "../ui/Button";
 import IconButton from "../ui/IconButton";
@@ -17,10 +26,36 @@ function ProductActions({ product }) {
 
   const productId = product.id || product._id;
 
-  const isOutOfStock = product.stock <= 0;
+  const isOutOfStock = Number(product.stock) <= 0;
+
+  /* =====================================================
+     WISHLIST STATE
+  ===================================================== */
+
+  const isWishlisted = useSelector((state) =>
+    state.wishlist.items.some(
+      (item) => String(item.id || item._id) === String(productId),
+    ),
+  );
+
+  /* =====================================================
+     COMPARE STATE
+  ===================================================== */
+
+  const compareItems = useSelector((state) => state.compare.items);
+
+  const isCompared = compareItems.some(
+    (item) => String(item.id || item._id) === String(productId),
+  );
+
+  const compareLimitReached = compareItems.length >= 4 && !isCompared;
+
+  /* =====================================================
+     QUANTITY
+  ===================================================== */
 
   const increaseQuantity = () => {
-    if (quantity < product.stock) {
+    if (quantity < Number(product.stock)) {
       setQuantity((current) => current + 1);
     }
   };
@@ -29,7 +64,10 @@ function ProductActions({ product }) {
     setQuantity((current) => (current > 1 ? current - 1 : 1));
   };
 
-  // Add to Cart
+  /* =====================================================
+     ADD TO CART
+  ===================================================== */
+
   const handleAddToCart = () => {
     if (isOutOfStock) {
       return;
@@ -46,14 +84,15 @@ function ProductActions({ product }) {
     );
   };
 
-  // Buy Now
+  /* =====================================================
+     BUY NOW
+  ===================================================== */
+
   const handleBuyNow = () => {
     if (isOutOfStock) {
       return;
     }
 
-    // Buy Now uses checkout state.
-    // It does NOT modify the normal cart.
     dispatch(
       startBuyNow({
         id: productId,
@@ -64,18 +103,71 @@ function ProductActions({ product }) {
       }),
     );
 
-    // Go directly to checkout
     navigate("/checkout");
+  };
+
+  /* =====================================================
+     WISHLIST
+  ===================================================== */
+
+  const handleWishlist = () => {
+    dispatch(
+      toggleWishlist({
+        id: productId,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        category: product.category,
+        categoryLabel: product.categoryLabel,
+        rating: product.rating,
+        reviewCount: product.reviewCount,
+        stock: product.stock,
+        brand: product.brand,
+      }),
+    );
+  };
+
+  /* =====================================================
+     COMPARE
+  ===================================================== */
+
+  const handleCompare = () => {
+    if (compareLimitReached) {
+      return;
+    }
+
+    dispatch(
+      toggleCompare({
+        id: productId,
+        name: product.name,
+        price: product.price,
+        image: product.image,
+        category: product.category,
+        categoryLabel: product.categoryLabel,
+        rating: product.rating,
+        reviewCount: product.reviewCount,
+        stock: product.stock,
+        brand: product.brand,
+        oldPrice: product.oldPrice,
+        discount: product.discount,
+        description: product.description,
+        sku: product.sku,
+      }),
+    );
   };
 
   return (
     <div className="space-y-4 border-t border-outline-variant pt-6">
-      {/* Quantity */}
+      {/* =================================================
+          QUANTITY
+      ================================================= */}
+
       <div>
         <p className="mb-2 text-sm font-semibold text-text">Quantity</p>
 
         <div className="flex w-fit items-center overflow-hidden rounded-xl border border-outline-variant bg-surface">
           {/* Decrease */}
+
           <IconButton
             label="Decrease quantity"
             variant="standard"
@@ -87,38 +179,45 @@ function ProductActions({ product }) {
           </IconButton>
 
           {/* Quantity */}
+
           <span className="flex h-10 min-w-12 items-center justify-center px-3 text-sm font-semibold text-text">
             {quantity}
           </span>
 
           {/* Increase */}
+
           <IconButton
             label="Increase quantity"
             variant="standard"
             size="small"
             onClick={increaseQuantity}
-            disabled={isOutOfStock || quantity >= product.stock}
+            disabled={isOutOfStock || quantity >= Number(product.stock)}
           >
             <Plus size={17} />
           </IconButton>
         </div>
 
-        {!isOutOfStock && product.stock <= 10 && (
+        {!isOutOfStock && Number(product.stock) <= 10 && (
           <p className="mt-2 text-xs font-medium text-warning">
             Only {product.stock} left in stock
           </p>
         )}
       </div>
 
-      {/* Actions */}
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+      {/* =================================================
+          PRIMARY ACTIONS
+      ================================================= */}
+
+      <div className="grid gap-3 sm:grid-cols-2">
         {/* Add to Cart */}
+
         <Button size="large" disabled={isOutOfStock} onClick={handleAddToCart}>
           <ShoppingCart size={18} />
           Add to Cart
         </Button>
 
         {/* Buy Now */}
+
         <Button
           size="large"
           variant="tonal"
@@ -128,14 +227,52 @@ function ProductActions({ product }) {
           <Zap size={18} />
           Buy Now
         </Button>
-
-        {/* Wishlist */}
-        <IconButton label="Add to wishlist" size="large" variant="outlined">
-          <Heart size={20} />
-        </IconButton>
       </div>
 
-      {/* Delivery information */}
+      {/* =================================================
+          SECONDARY ACTIONS
+      ================================================= */}
+
+      <div className="grid grid-cols-2 gap-3">
+        {/* Wishlist */}
+
+        <Button
+          size="medium"
+          variant={isWishlisted ? "tonal" : "outlined"}
+          onClick={handleWishlist}
+          aria-pressed={isWishlisted}
+        >
+          <Heart size={18} fill={isWishlisted ? "currentColor" : "none"} />
+
+          {isWishlisted ? "Wishlisted" : "Wishlist"}
+        </Button>
+
+        {/* Compare */}
+
+        <Button
+          size="medium"
+          variant={isCompared ? "tonal" : "outlined"}
+          onClick={handleCompare}
+          disabled={compareLimitReached}
+          aria-pressed={isCompared}
+          title={
+            compareLimitReached ? "You can compare up to 4 products" : undefined
+          }
+        >
+          <GitCompareArrows size={18} />
+
+          {isCompared
+            ? "Compared"
+            : compareLimitReached
+              ? "Limit Reached"
+              : "Compare"}
+        </Button>
+      </div>
+
+      {/* =================================================
+          DELIVERY INFORMATION
+      ================================================= */}
+
       <div className="rounded-2xl bg-surface-container p-4">
         <div className="space-y-2 text-sm">
           <p className="font-medium text-text">Free delivery</p>
