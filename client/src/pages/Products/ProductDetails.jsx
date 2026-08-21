@@ -9,8 +9,18 @@ import products from "../../data/products";
 function ProductDetails() {
   const { productId } = useParams();
 
-  const product = products.find((item) => item.id === productId);
+  /*
+   * Support both:
+   * - Local/static products: id
+   * - Future MongoDB products: _id
+   */
+  const product = products.find(
+    (item) => String(item.id || item._id) === String(productId),
+  );
 
+  /*
+   * Product not found
+   */
   if (!product) {
     return (
       <main className="min-h-screen bg-background py-12">
@@ -68,7 +78,7 @@ function ProductDetails() {
               <p className="text-xs text-text-secondary">Brand</p>
 
               <p className="mt-1 text-sm font-medium text-text">
-                {product.brand}
+                {product.brand || "—"}
               </p>
             </div>
 
@@ -77,7 +87,7 @@ function ProductDetails() {
               <p className="text-xs text-text-secondary">SKU</p>
 
               <p className="mt-1 text-sm font-medium text-text">
-                {product.sku}
+                {product.sku || "—"}
               </p>
             </div>
 
@@ -86,7 +96,7 @@ function ProductDetails() {
               <p className="text-xs text-text-secondary">Category</p>
 
               <p className="mt-1 text-sm font-medium text-text">
-                {product.categoryLabel || product.category}
+                {product.categoryLabel || product.category || "—"}
               </p>
             </div>
 
@@ -96,12 +106,12 @@ function ProductDetails() {
 
               <p
                 className={
-                  product.stock > 0
+                  Number(product.stock) > 0
                     ? "mt-1 text-sm font-medium text-success"
                     : "mt-1 text-sm font-medium text-error"
                 }
               >
-                {product.stock > 0 ? "In Stock" : "Out of Stock"}
+                {Number(product.stock) > 0 ? "In Stock" : "Out of Stock"}
               </p>
             </div>
           </div>

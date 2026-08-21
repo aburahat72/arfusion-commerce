@@ -10,6 +10,7 @@ function Input({
   disabled = false,
   required = false,
   autoComplete,
+  className = "",
 }) {
   const inputId = `input-${name}`;
 
@@ -65,6 +66,8 @@ function Input({
               ? "border-error focus:border-error focus:ring-error/20"
               : "border-outline-variant focus:border-primary focus:ring-primary/20"
           }
+
+          ${className}
         `}
       />
 
