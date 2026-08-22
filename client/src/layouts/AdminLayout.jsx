@@ -4,7 +4,10 @@ function AdminLayout() {
   return (
     <div className="min-h-screen bg-[#F8F9FC] text-[#1F1F23]">
       <div className="flex min-h-screen">
-        {/* Sidebar */}
+        {/* =================================================
+            SIDEBAR
+        ================================================= */}
+
         <aside className="hidden w-64 shrink-0 border-r border-[#E3E5EA] bg-white lg:flex lg:flex-col">
           <div className="flex h-16 items-center border-b border-[#E3E5EA] px-6">
             <span className="text-xl font-semibold text-[#6750A4]">
@@ -23,7 +26,10 @@ function AdminLayout() {
           </div>
         </aside>
 
-        {/* Main */}
+        {/* =================================================
+            MAIN
+        ================================================= */}
+
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 h-16 border-b border-[#E3E5EA] bg-white">
             <div className="flex h-full items-center justify-between px-4 sm:px-6 lg:px-8">
