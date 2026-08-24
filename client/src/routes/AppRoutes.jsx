@@ -43,13 +43,20 @@ import ForgotPassword from "../pages/Auth/ForgotPassword";
 // ADMIN PAGES
 // =====================================================
 
-function AdminDashboard() {
-  return (
-    <div className="min-h-dvh bg-background p-6 text-text">
-      <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
-    </div>
-  );
-}
+import AdminDashboard from "../pages/Admin/Dashboard/AdminDashboard";
+import AdminOrders from "../pages/Admin/Orders/AdminOrders";
+import AdminOrderDetails from "../pages/Admin/Orders/AdminOrderDetails";
+import AdminProducts from "../pages/Admin/Products/AdminProducts";
+import AdminInventory from "../pages/Admin/Inventory/AdminInventory";
+import AdminCustomers from "../pages/Admin/Customers/AdminCustomers";
+import AdminReviews from "../pages/Admin/Reviews/AdminReviews";
+import AdminCategories from "../pages/Admin/Categories/AdminCategories";
+import AdminCoupons from "../pages/Admin/Coupons/AdminCoupons";
+import AdminBanners from "../pages/Admin/Banners/AdminBanners";
+import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
+import AdminReports from "../pages/Admin/Reports/AdminReports";
+import AdminSettings from "../pages/Admin/Settings/AdminSettings";
+import AdminProfile from "../pages/Admin/Profile/AdminProfile";
 
 // =====================================================
 // 404 PAGE
@@ -63,8 +70,11 @@ function NotFound() {
 
         <p className="mt-3 text-base text-text-secondary">Page not found</p>
 
-        <a
-          href="/"
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = "/";
+          }}
           className="
             mt-6
             inline-flex
@@ -82,7 +92,7 @@ function NotFound() {
           "
         >
           Back to Home
-        </a>
+        </button>
       </div>
     </main>
   );
@@ -97,44 +107,35 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* =================================================
-            AUTHENTICATION ROUTES
-
-            Dedicated authentication UI.
-            No customer Navbar/Footer.
+            AUTHENTICATION
+            Dedicated authentication UI
         ================================================= */}
 
         <Route element={<AuthLayout />}>
-          {/* Login */}
           <Route path="/login" element={<Login />} />
 
-          {/* Register */}
           <Route path="/register" element={<Register />} />
 
-          {/* Forgot Password */}
           <Route path="/forgot-password" element={<ForgotPassword />} />
         </Route>
 
         {/* =================================================
-            CUSTOMER ROUTES
-
-            MainLayout:
-              Navbar
-              Page Content
-              Footer
+            CUSTOMER
+            Uses MainLayout
         ================================================= */}
 
         <Route element={<MainLayout />}>
-          {/* ================= HOME ================= */}
+          {/* Home */}
 
           <Route path="/" element={<Home />} />
 
-          {/* ================= PRODUCTS ================= */}
+          {/* Products */}
 
           <Route path="/products" element={<Products />} />
 
           <Route path="/products/:productId" element={<ProductDetails />} />
 
-          {/* ================= SHOPPING ================= */}
+          {/* Shopping */}
 
           <Route path="/cart" element={<Cart />} />
 
@@ -142,7 +143,7 @@ function AppRoutes() {
 
           <Route path="/compare" element={<Compare />} />
 
-          {/* ================= PROFILE ================= */}
+          {/* Profile */}
 
           <Route path="/profile" element={<Profile />} />
 
@@ -157,7 +158,7 @@ function AppRoutes() {
 
           <Route path="/profile/settings" element={<Settings />} />
 
-          {/* ================= CHECKOUT ================= */}
+          {/* Checkout */}
 
           <Route path="/checkout" element={<Checkout />} />
 
@@ -165,13 +166,67 @@ function AppRoutes() {
         </Route>
 
         {/* =================================================
-            ADMIN ROUTES
-
-            Admin has its own layout.
+            ADMIN
+            Uses AdminLayout
         ================================================= */}
 
         <Route element={<AdminLayout />}>
+          {/* Dashboard */}
+
           <Route path="/admin" element={<AdminDashboard />} />
+
+          {/* Orders */}
+
+          <Route path="/admin/orders" element={<AdminOrders />} />
+
+          <Route
+            path="/admin/orders/:orderId"
+            element={<AdminOrderDetails />}
+          />
+
+          {/* Products */}
+
+          <Route path="/admin/products" element={<AdminProducts />} />
+
+          {/* Customers */}
+
+          <Route path="/admin/customers" element={<AdminCustomers />} />
+
+          {/* Inventory */}
+
+          <Route path="/admin/inventory" element={<AdminInventory />} />
+
+          {/* Reviews */}
+
+          <Route path="/admin/reviews" element={<AdminReviews />} />
+
+          {/* Categories */}
+
+          <Route path="/admin/categories" element={<AdminCategories />} />
+
+          {/* Coupons */}
+
+          <Route path="/admin/coupons" element={<AdminCoupons />} />
+
+          {/* Banners */}
+
+          <Route path="/admin/banners" element={<AdminBanners />} />
+
+          {/* Analytics */}
+
+          <Route path="/admin/analytics" element={<AdminAnalytics />} />
+
+          {/* Reports */}
+
+          <Route path="/admin/reports" element={<AdminReports />} />
+
+          {/* Settings */}
+
+          <Route path="/admin/settings" element={<AdminSettings />} />
+
+          {/* Admin Profile */}
+
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         {/* =================================================
