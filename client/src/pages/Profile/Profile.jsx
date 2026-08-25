@@ -7,44 +7,32 @@ import {
   ShoppingCart,
   User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
-import {
-  getProfile,
-  clearSession,
-  setSession,
-} from "../../utils/profileStorage";
+import { useAuth } from "../../context/AuthContext";
 
 function Profile() {
   const navigate = useNavigate();
+
+  const { user, logout } = useAuth();
 
   const cartItems = useSelector((state) => state.cart.items);
 
   const wishlistItems = useSelector((state) => state.wishlist?.items || []);
 
-  const [profile, setProfile] = useState(getProfile());
-
-  useEffect(() => {
-    /*
-     * Create a local demo session.
-     *
-     * Later this will be replaced by
-     * your JWT authentication system.
-     */
-    setSession({
-      authenticated: true,
-      userId: "demo-user",
-    });
-  }, []);
-
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
 
   const wishlistCount = wishlistItems.length;
 
+  const userName = user?.fullName || "Customer";
+  const userEmail = user?.email || "";
+  const userRole = user?.role || "customer";
+
+  const membership = userRole === "admin" ? "Administrator" : "Premium Member";
+
   const handleLogout = () => {
-    clearSession();
+    logout();
 
     navigate("/login", {
       replace: true,
@@ -54,9 +42,7 @@ function Profile() {
   return (
     <main className="min-h-screen bg-background py-8 sm:py-10">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-        {/* =================================================
-            BREADCRUMB
-        ================================================= */}
+        {/* Breadcrumb */}
 
         <div className="mb-6 text-sm text-text-secondary">
           <button
@@ -72,38 +58,32 @@ function Profile() {
           <span className="font-medium text-text">My Profile</span>
         </div>
 
-        {/* =================================================
-            PROFILE HEADER
-        ================================================= */}
+        {/* Profile Header */}
 
         <section className="overflow-hidden rounded-3xl border border-outline-variant bg-surface shadow-sm">
           <div className="h-28 bg-primary-container sm:h-36" />
 
           <div className="px-5 pb-6 sm:px-8 sm:pb-8">
             <div className="-mt-12 flex flex-col gap-5 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
-              {/* User information */}
-
               <div className="flex items-end gap-4">
                 <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border-4 border-surface bg-primary text-2xl font-semibold text-white shadow-md sm:h-28 sm:w-28">
-                  {profile.name?.charAt(0).toUpperCase() || "J"}
+                  {userName.charAt(0).toUpperCase()}
                 </div>
 
                 <div className="pb-1">
                   <h1 className="text-2xl font-semibold text-text sm:text-3xl">
-                    {profile.name}
+                    {userName}
                   </h1>
 
                   <p className="mt-1 text-sm text-text-secondary">
-                    {profile.email}
+                    {userEmail}
                   </p>
 
                   <span className="mt-2 inline-flex rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-primary">
-                    {profile.membership}
+                    {membership}
                   </span>
                 </div>
               </div>
-
-              {/* Edit Profile */}
 
               <button
                 type="button"
@@ -116,9 +96,7 @@ function Profile() {
           </div>
         </section>
 
-        {/* =================================================
-            QUICK STATS
-        ================================================= */}
+        {/* Quick Stats */}
 
         <section className="mt-6 grid gap-4 sm:grid-cols-3">
           <ProfileStat
@@ -143,9 +121,7 @@ function Profile() {
           />
         </section>
 
-        {/* =================================================
-            ACCOUNT
-        ================================================= */}
+        {/* Account */}
 
         <section className="mt-6 rounded-3xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
           <div className="mb-4">
@@ -194,9 +170,7 @@ function Profile() {
           </div>
         </section>
 
-        {/* =================================================
-            SIGN OUT
-        ================================================= */}
+        {/* Sign Out */}
 
         <div className="mt-6">
           <button

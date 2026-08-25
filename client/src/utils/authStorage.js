@@ -1,144 +1,34 @@
-const USERS_KEY = "arfusion_users";
-const SESSION_KEY = "arfusion_session";
+const TOKEN_KEY = "arfusion_token";
+const USER_KEY = "arfusion_user";
 
-/* =====================================================
-   DEFAULT USER STORAGE
-===================================================== */
-
-function getUsers() {
-  try {
-    const storedUsers = localStorage.getItem(USERS_KEY);
-
-    return storedUsers ? JSON.parse(storedUsers) : [];
-  } catch {
-    return [];
-  }
+export function saveAuth(token, user) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-/* =====================================================
-   SAVE USERS
-===================================================== */
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
 }
-
-/* =====================================================
-   REGISTER
-===================================================== */
-
-export function registerUser({ name, email, phone, password }) {
-  const users = getUsers();
-
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const existingUser = users.find((user) => user.email === normalizedEmail);
-
-  if (existingUser) {
-    return {
-      success: false,
-      message: "An account with this email already exists.",
-    };
-  }
-
-  const newUser = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    email: normalizedEmail,
-    phone: phone.trim(),
-    password,
-    membership: "Premium Member",
-    createdAt: new Date().toISOString(),
-  };
-
-  users.push(newUser);
-
-  saveUsers(users);
-
-  return {
-    success: true,
-    user: newUser,
-  };
-}
-
-/* =====================================================
-   LOGIN
-===================================================== */
-
-export function loginUser({ email, password }) {
-  const users = getUsers();
-
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const user = users.find(
-    (item) => item.email === normalizedEmail && item.password === password,
-  );
-
-  if (!user) {
-    return {
-      success: false,
-      message: "Invalid email or password.",
-    };
-  }
-
-  const sessionUser = {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    membership: user.membership,
-  };
-
-  localStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({
-      authenticated: true,
-      user: sessionUser,
-    }),
-  );
-
-  return {
-    success: true,
-    user: sessionUser,
-  };
-}
-
-/* =====================================================
-   SESSION
-===================================================== */
 
 export function getCurrentUser() {
   try {
-    const session = localStorage.getItem(SESSION_KEY);
+    const user = localStorage.getItem(USER_KEY);
 
-    if (!session) {
-      return null;
-    }
-
-    const parsed = JSON.parse(session);
-
-    if (!parsed?.authenticated) {
-      return null;
-    }
-
-    return parsed.user || null;
+    return user ? JSON.parse(user) : null;
   } catch {
     return null;
   }
 }
 
-/* =====================================================
-   LOGOUT
-===================================================== */
-
-export function logoutUser() {
-  localStorage.removeItem(SESSION_KEY);
+export function updateUser(user) {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-/* =====================================================
-   CHECK AUTH
-===================================================== */
+export function logoutUser() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
 
 export function isAuthenticated() {
-  return Boolean(getCurrentUser());
+  return Boolean(getToken());
 }

@@ -36,12 +36,21 @@ app.use(helmet());
 // CORS configuration
 // Allows the frontend application to communicate with this backend.
 // The allowed frontend URL is stored in the environment variables.
+// app.use(
+//   cors({
+//     origin: process.env.CLIENT_URL,
+//     credentials: true,
+//   }),
+// );
+
+// temporary
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: "http://localhost:5173",
     credentials: true,
   }),
 );
+
 
 // Body parsers
 app.use(express.json({ limit: "10mb" }));

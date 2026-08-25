@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  Boxes,
   ChevronDown,
   FileBarChart,
   House,
@@ -9,15 +8,16 @@ import {
   LogOut,
   Package,
   Percent,
-  Settings,
   ShoppingCart,
   Star,
+  Settings,
   Tags,
   Users,
   Warehouse,
   X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+
+import { NavLink, useNavigate } from "react-router-dom";
 
 function AdminSidebar({ mobileOpen = false, onClose }) {
   const navigate = useNavigate();
@@ -130,95 +130,109 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
         ================================================= */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {/* Dashboard */}
+
           <AdminNavItem
+            to="/admin"
             icon={<LayoutDashboard size={19} />}
             label="Dashboard"
-            onClick={() => goTo("/admin")}
-            active
+            onClose={onClose}
           />
 
           <NavSection label="Sales" />
 
           <AdminNavItem
+            to="/admin/orders"
             icon={<ShoppingCart size={19} />}
             label="Orders"
-            onClick={() => goTo("/admin/orders")}
             expandable
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/customers"
             icon={<Users size={19} />}
             label="Customers"
-            onClick={() => goTo("/admin/customers")}
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/reviews"
             icon={<Star size={19} />}
             label="Reviews"
-            onClick={() => goTo("/admin/reviews")}
+            onClose={onClose}
           />
 
           <NavSection label="Catalog" />
 
           <AdminNavItem
+            to="/admin/products"
             icon={<Package size={19} />}
             label="Products"
-            onClick={() => goTo("/admin/products")}
             expandable
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/categories"
             icon={<Tags size={19} />}
             label="Categories"
-            onClick={() => goTo("/admin/categories")}
             expandable
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/inventory"
             icon={<Warehouse size={19} />}
             label="Inventory"
-            onClick={() => goTo("/admin/inventory")}
             expandable
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/coupons"
             icon={<Percent size={19} />}
             label="Coupons & Discounts"
-            onClick={() => goTo("/admin/coupons")}
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/banners"
             icon={<Image size={19} />}
             label="Banners"
-            onClick={() => goTo("/admin/banners")}
+            onClose={onClose}
           />
 
           <NavSection label="Analytics" />
 
           <AdminNavItem
+            to="/admin/analytics"
             icon={<BarChart3 size={19} />}
             label="Analytics"
-            onClick={() => goTo("/admin/analytics")}
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/reports"
             icon={<FileBarChart size={19} />}
             label="Reports"
-            onClick={() => goTo("/admin/reports")}
+            onClose={onClose}
           />
 
           <NavSection label="Settings" />
 
           <AdminNavItem
+            to="/admin/settings"
             icon={<Settings size={19} />}
             label="Settings"
-            onClick={() => goTo("/admin/settings")}
+            onClose={onClose}
           />
 
           <AdminNavItem
+            to="/admin/profile"
             icon={<House size={19} />}
             label="Admin Profile"
-            onClick={() => goTo("/admin/profile")}
+            onClose={onClose}
           />
         </nav>
 
@@ -229,7 +243,10 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
         <div className="shrink-0 border-t border-outline-variant p-3">
           <button
             type="button"
-            onClick={() => navigate("/login")}
+            onClick={() => {
+              onClose?.();
+              navigate("/login");
+            }}
             className="
               flex
               w-full
@@ -272,58 +289,67 @@ function NavSection({ label }) {
    NAV ITEM
 ========================================================= */
 
-function AdminNavItem({
-  icon,
-  label,
-  onClick,
-  active = false,
-  expandable = false,
-}) {
+function AdminNavItem({ to, icon, label, expandable = false, onClose }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`
-        group
-        mb-1
-        flex
-        w-full
-        items-center
-        gap-3
-        rounded-xl
-        px-3
-        py-2.5
-        text-left
-        text-sm
-        font-medium
-        transition-all
-        duration-150
-        ${
-          active
-            ? "bg-primary-container text-primary"
-            : "text-text-secondary hover:bg-surface-container hover:text-text"
-        }
-      `}
-    >
-      <span
-        className={`
-          shrink-0
+    <NavLink
+      to={to}
+      end={to === "/admin"}
+      onClick={() => onClose?.()}
+      className={({ isActive }) =>
+        `
+          group
+          mb-1
+          flex
+          w-full
+          items-center
+          gap-3
+          rounded-xl
+          px-3
+          py-2.5
+          text-left
+          text-sm
+          font-medium
+          transition-all
+          duration-150
           ${
-            active
-              ? "text-primary"
-              : "text-text-secondary group-hover:text-text"
+            isActive
+              ? "bg-primary-container text-primary shadow-sm"
+              : "text-text-secondary hover:bg-surface-container hover:text-text"
           }
-        `}
-      >
-        {icon}
-      </span>
+        `
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className={`
+              shrink-0
+              transition-colors
+              ${
+                isActive
+                  ? "text-primary"
+                  : "text-text-secondary group-hover:text-text"
+              }
+            `}
+          >
+            {icon}
+          </span>
 
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
 
-      {expandable && (
-        <ChevronDown size={15} className="shrink-0 text-text-secondary" />
+          {expandable && (
+            <ChevronDown
+              size={15}
+              className={`
+                shrink-0
+                transition-colors
+                ${isActive ? "text-primary" : "text-text-secondary"}
+              `}
+            />
+          )}
+        </>
       )}
-    </button>
+    </NavLink>
   );
 }
 

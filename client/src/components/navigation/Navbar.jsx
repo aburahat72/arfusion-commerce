@@ -10,17 +10,27 @@ import {
   Package,
   LayoutGrid,
 } from "lucide-react";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import Button from "../ui/Button";
 import IconButton from "../ui/IconButton";
 
 import products from "../../data/products";
 
+import { useAuth } from "../../context/AuthContext";
+
 function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  /* =====================================================
+     AUTH CONTEXT
+  ===================================================== */
+
+  const { user, isAuthenticated } = useAuth();
 
   /* =====================================================
      REFS
@@ -128,10 +138,6 @@ function Navbar() {
       return;
     }
 
-    /*
-     * If a suggestion is selected,
-     * open that product directly.
-     */
     if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
       const selectedProduct = suggestions[selectedIndex];
 
@@ -146,14 +152,8 @@ function Navbar() {
       return;
     }
 
-    /*
-     * Normal keyword search.
-     */
     navigate(`/products?search=${encodeURIComponent(query)}`);
 
-    /*
-     * Clear search after submit.
-     */
     setSearch("");
     setSelectedIndex(-1);
     setIsSearchFocused(false);
@@ -178,10 +178,6 @@ function Navbar() {
   ===================================================== */
 
   const handleClearSearch = () => {
-    /*
-     * Only clear text.
-     * Do not navigate.
-     */
     setSearch("");
     setSelectedIndex(-1);
   };
@@ -200,8 +196,6 @@ function Navbar() {
       return;
     }
 
-    /* Arrow Down */
-
     if (event.key === "ArrowDown") {
       event.preventDefault();
 
@@ -216,8 +210,6 @@ function Navbar() {
       return;
     }
 
-    /* Arrow Up */
-
     if (event.key === "ArrowUp") {
       event.preventDefault();
 
@@ -231,8 +223,6 @@ function Navbar() {
 
       return;
     }
-
-    /* Escape */
 
     if (event.key === "Escape") {
       event.preventDefault();
@@ -279,23 +269,6 @@ function Navbar() {
 
   /* =====================================================
      MOBILE NAV AUTO SCROLL
-
-     Professional e-commerce behavior:
-
-     Pause
-       ↓
-     Slow acceleration
-       ↓
-     Smooth movement
-       ↓
-     Slow deceleration
-       ↓
-     Pause
-       ↓
-     Repeat
-
-     User interaction immediately pauses
-     automatic movement.
   ===================================================== */
 
   useEffect(() => {
@@ -311,41 +284,23 @@ function Navbar() {
     const PAUSE_AFTER_MOVE = 2500;
     const USER_RESUME_DELAY = 3500;
 
-    /*
-     * Clear all timers safely.
-     */
     const clearTimers = () => {
       clearTimeout(mobileNavTimerRef.current);
-
       clearTimeout(mobileNavResumeRef.current);
     };
 
-    /*
-     * Professional ease-in-out curve.
-     *
-     * Starts slowly,
-     * becomes smoother in the middle,
-     * then slows down before stopping.
-     */
     const easeInOut = (progress) => {
       return progress < 0.5
         ? 2 * progress * progress
         : 1 - Math.pow(-2 * progress + 2, 2) / 2;
     };
 
-    /*
-     * Animate scroll manually.
-     *
-     * This gives us better control than
-     * native scroll-behavior: smooth.
-     */
     const animateScroll = (start, target, duration, onComplete) => {
       const startTime = performance.now();
 
       const animate = (currentTime) => {
         if (isUserInteracting) {
           mobileNavAnimationRef.current = null;
-
           return;
         }
 
@@ -371,10 +326,6 @@ function Navbar() {
       mobileNavAnimationRef.current = requestAnimationFrame(animate);
     };
 
-    /*
-     * Calculate how far the navigation
-     * should move.
-     */
     const getScrollDistance = () => {
       const maxScroll = nav.scrollWidth - nav.clientWidth;
 
@@ -382,18 +333,9 @@ function Navbar() {
         return 0;
       }
 
-      /*
-       * Around 48% of visible width.
-       *
-       * This prevents the navigation from
-       * moving too aggressively.
-       */
       return Math.min(nav.clientWidth * 0.48, maxScroll);
     };
 
-    /*
-     * Schedule next movement.
-     */
     const scheduleNextMovement = (delay = PAUSE_BEFORE_MOVE) => {
       clearTimeout(mobileNavTimerRef.current);
 
@@ -402,9 +344,6 @@ function Navbar() {
       }, delay);
     };
 
-    /*
-     * Start one automatic movement.
-     */
     const startNextMovement = () => {
       if (isUserInteracting) {
         return;
@@ -418,10 +357,6 @@ function Navbar() {
 
       const currentScroll = nav.scrollLeft;
 
-      /*
-       * If we're at the end,
-       * smoothly return to the beginning.
-       */
       if (currentScroll >= maxScroll - 4) {
         animateScroll(currentScroll, 0, 1900, () => {
           scheduleNextMovement(PAUSE_AFTER_MOVE);
@@ -434,19 +369,11 @@ function Navbar() {
 
       const target = Math.min(currentScroll + distance, maxScroll);
 
-      /*
-       * 1700ms movement gives a
-       * slow, premium feel.
-       */
       animateScroll(currentScroll, target, 1700, () => {
         scheduleNextMovement(PAUSE_AFTER_MOVE);
       });
     };
 
-    /*
-     * Pause autoplay when the user
-     * interacts with the navigation.
-     */
     const pauseForUser = () => {
       isUserInteracting = true;
 
@@ -458,10 +385,6 @@ function Navbar() {
         mobileNavAnimationRef.current = null;
       }
 
-      /*
-       * Resume after the user stops
-       * interacting.
-       */
       mobileNavResumeRef.current = setTimeout(() => {
         isUserInteracting = false;
 
@@ -469,33 +392,18 @@ function Navbar() {
       }, USER_RESUME_DELAY);
     };
 
-    /*
-     * Touch interaction.
-     */
     nav.addEventListener("touchstart", pauseForUser, {
       passive: true,
     });
 
-    /*
-     * Pointer interaction.
-     */
     nav.addEventListener("pointerdown", pauseForUser);
 
-    /*
-     * Mouse wheel.
-     */
     nav.addEventListener("wheel", pauseForUser, {
       passive: true,
     });
 
-    /*
-     * Start autoplay.
-     */
     scheduleNextMovement(PAUSE_BEFORE_MOVE);
 
-    /*
-     * Cleanup.
-     */
     return () => {
       clearTimers();
 
@@ -612,7 +520,9 @@ function Navbar() {
 
               <button
                 type="button"
-                onClick={() => navigate("/profile")}
+                onClick={() =>
+                  navigate(isAuthenticated ? "/profile" : "/login")
+                }
                 className="
                   ml-2
                   hidden
@@ -626,13 +536,25 @@ function Navbar() {
                 "
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-container text-sm font-semibold text-primary">
-                  J
+                  {isAuthenticated ? (
+                    user?.fullName?.charAt(0).toUpperCase() || "U"
+                  ) : (
+                    <User size={18} />
+                  )}
                 </div>
 
                 <div className="hidden text-left lg:block">
-                  <p className="text-sm font-medium text-text">John Doe</p>
+                  <p className="max-w-45 truncate text-sm font-medium text-text">
+                    {isAuthenticated ? user?.fullName || "Customer" : "Sign In"}
+                  </p>
 
-                  <p className="text-xs text-text-secondary">Premium Member</p>
+                  <p className="text-xs text-text-secondary">
+                    {isAuthenticated
+                      ? user?.role === "admin"
+                        ? "Administrator"
+                        : "Premium Member"
+                      : "Account"}
+                  </p>
                 </div>
 
                 <ChevronDown size={17} className="text-text-secondary" />
@@ -743,13 +665,9 @@ function Navbar() {
               />
             </div>
 
-            {/* =================================================
-                MOBILE QUICK NAV
-            ================================================= */}
+            {/* Mobile Quick Nav */}
 
             <div className="relative -mx-4 border-t border-outline-variant">
-              {/* Left fade */}
-
               <div
                 className="
                   pointer-events-none
@@ -764,8 +682,6 @@ function Navbar() {
                   to-transparent
                 "
               />
-
-              {/* Right fade */}
 
               <div
                 className="
@@ -1002,7 +918,7 @@ function Navbar() {
 
           <button
             type="button"
-            onClick={() => navigateTo("/profile")}
+            onClick={() => navigateTo(isAuthenticated ? "/profile" : "/login")}
             className="
               flex
               items-center
@@ -1018,14 +934,24 @@ function Navbar() {
             "
           >
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-container text-sm font-semibold text-primary">
-              J
+              {isAuthenticated ? (
+                user?.fullName?.charAt(0).toUpperCase() || "U"
+              ) : (
+                <User size={19} />
+              )}
             </div>
 
             <div className="flex-1">
-              <p className="text-sm font-semibold text-text">John Doe</p>
+              <p className="text-sm font-semibold text-text">
+                {isAuthenticated ? user?.fullName || "Customer" : "Sign In"}
+              </p>
 
               <p className="mt-0.5 text-xs text-text-secondary">
-                Premium Member
+                {isAuthenticated
+                  ? user?.role === "admin"
+                    ? "Administrator"
+                    : "Premium Member"
+                  : "Sign in to your account"}
               </p>
             </div>
 
@@ -1143,8 +1069,6 @@ function SearchBox({
       }
     >
       <div className="relative">
-        {/* Search icon */}
-
         <Search
           size={19}
           aria-hidden="true"
@@ -1158,8 +1082,6 @@ function SearchBox({
             text-text-secondary
           "
         />
-
-        {/* Input */}
 
         <input
           type="search"
@@ -1195,13 +1117,10 @@ function SearchBox({
             focus:border-primary
             focus:ring-2
             focus:ring-primary/20
-
             [&::-webkit-search-cancel-button]:appearance-none
             [&::-webkit-search-decoration]:appearance-none
           "
         />
-
-        {/* Clear */}
 
         {search && (
           <button
@@ -1231,8 +1150,6 @@ function SearchBox({
           </button>
         )}
 
-        {/* Search button */}
-
         <button
           type="submit"
           aria-label="Search"
@@ -1258,10 +1175,6 @@ function SearchBox({
           <Search size={17} />
         </button>
       </div>
-
-      {/* =================================================
-          SEARCH SUGGESTIONS
-      ================================================= */}
 
       {showSuggestions && (
         <div
@@ -1318,8 +1231,6 @@ function SearchBox({
                           }
                         `}
                     >
-                      {/* Product image */}
-
                       <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-surface-container">
                         <img
                           src={product.image}
@@ -1327,8 +1238,6 @@ function SearchBox({
                           className="h-full w-full object-cover"
                         />
                       </div>
-
-                      {/* Product information */}
 
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-text">
@@ -1352,8 +1261,6 @@ function SearchBox({
                         </div>
                       </div>
 
-                      {/* Price */}
-
                       <span className="shrink-0 text-sm font-semibold text-text">
                         ₹{Number(product.price).toLocaleString("en-IN")}
                       </span>
@@ -1361,8 +1268,6 @@ function SearchBox({
                   );
                 })}
               </div>
-
-              {/* Search all */}
 
               <button
                 type="submit"

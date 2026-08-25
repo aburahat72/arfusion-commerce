@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { ShoppingCart, Mail, Lock, Eye, EyeOff, Check } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../context/AuthContext";
+import api from "../../services/api";
 
 function Login() {
-  // =====================================================
-  // STATE
-  // =====================================================
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const { login } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -15,6 +20,7 @@ function Login() {
   });
 
   const [errors, setErrors] = useState({});
+  const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   // =====================================================
@@ -29,11 +35,16 @@ function Login() {
       [name]: type === "checkbox" ? checked : value,
     }));
 
-    if (errors[name]) {
+    if (errors[name] || errors.general) {
       setErrors((previous) => ({
         ...previous,
         [name]: "",
+        general: "",
       }));
+    }
+
+    if (successMessage) {
+      setSuccessMessage("");
     }
   };
 
@@ -62,11 +73,15 @@ function Login() {
   };
 
   // =====================================================
-  // SUBMIT
+  // LOGIN
   // =====================================================
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (isLoading) {
+      return;
+    }
 
     if (!validateForm()) {
       return;
@@ -74,33 +89,78 @@ function Login() {
 
     try {
       setIsLoading(true);
+      setErrors({});
+      setSuccessMessage("");
 
       const loginData = {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        rememberMe: formData.rememberMe,
       };
 
-      console.log("Login data:", loginData);
+      console.log("Sending login request...");
 
-      /*
-       * Connect your backend here.
-       *
-       * Example:
-       *
-       * const response = await axios.post(
-       *   "/api/auth/login",
-       *   loginData
-       * );
-       *
-       * console.log(response.data);
-       */
+      const response = await api.post("/auth/login", loginData);
 
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      console.log("Login response:", response.data);
+
+      if (!response.data?.success) {
+        setErrors({
+          general:
+            response.data?.message ||
+            "Login failed. Please check your credentials.",
+        });
+
+        return;
+      }
+
+      const { token, user } = response.data;
+
+      if (!token || !user) {
+        setErrors({
+          general: "Invalid login response from server.",
+        });
+
+        return;
+      }
+
+      // Update the central authentication state.
+      login(token, user);
 
       console.log("Login successful");
+      console.log("Authenticated user:", user);
+
+      setSuccessMessage("Login successful! Redirecting...");
+
+      // Customer login defaults to home.
+      // If a protected customer page originally
+      // requested login, return to that page.
+      const redirectTo = location.state?.from?.pathname || "/";
+
+      navigate(redirectTo, {
+        replace: true,
+      });
     } catch (error) {
       console.error("Login failed:", error);
+
+      const status = error.response?.status;
+
+      let message = error.response?.data?.message;
+
+      if (!message) {
+        if (status === 401) {
+          message = "Invalid email or password.";
+        } else if (status === 403) {
+          message = "Your account does not have access.";
+        } else if (status === 429) {
+          message = "Too many login attempts. Please try again later.";
+        } else {
+          message = "Unable to connect to the server. Please try again.";
+        }
+      }
+
+      setErrors({
+        general: message,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -111,16 +171,8 @@ function Login() {
   // =====================================================
 
   const handleGoogleLogin = () => {
-    /*
-     * Connect Google OAuth here.
-     */
-
     console.log("Continue with Google");
   };
-
-  // =====================================================
-  // RENDER
-  // =====================================================
 
   return (
     <main
@@ -145,8 +197,6 @@ function Login() {
           overflow-hidden
         "
       >
-        {/* Left decoration */}
-
         <div
           className="
             absolute
@@ -160,8 +210,6 @@ function Login() {
             sm:-left-72.5
           "
         />
-
-        {/* Top-right dots */}
 
         <div
           className="
@@ -181,8 +229,6 @@ function Login() {
           "
         />
 
-        {/* Center glow */}
-
         <div
           className="
             absolute
@@ -200,7 +246,7 @@ function Login() {
       </div>
 
       {/* =================================================
-          PAGE CONTENT
+          PAGE
       ================================================= */}
 
       <div
@@ -222,10 +268,6 @@ function Login() {
           lg:py-10
         "
       >
-        {/* =================================================
-            LOGIN CARD
-        ================================================= */}
-
         <section
           className="
             w-full
@@ -336,7 +378,7 @@ function Login() {
           </div>
 
           {/* =================================================
-              GOOGLE BUTTON
+              GOOGLE
           ================================================= */}
 
           <button
@@ -414,7 +456,55 @@ function Login() {
           ================================================= */}
 
           <form onSubmit={handleSubmit} noValidate>
-            {/* EMAIL */}
+            {/* Success */}
+
+            {successMessage && (
+              <div
+                className="
+                  mb-4
+                  rounded-lg
+                  border
+                  border-green-200
+                  bg-green-50
+                  px-3
+                  py-2.5
+                  text-center
+                  text-[11px]
+                  text-green-700
+                  sm:text-xs
+                "
+                role="status"
+              >
+                {successMessage}
+              </div>
+            )}
+
+            {/* Error */}
+
+            {errors.general && (
+              <div
+                className="
+                  mb-4
+                  rounded-lg
+                  border
+                  border-red-200
+                  bg-red-50
+                  px-3
+                  py-2.5
+                  text-center
+                  text-[11px]
+                  text-red-600
+                  sm:text-xs
+                "
+                role="alert"
+              >
+                {errors.general}
+              </div>
+            )}
+
+            {/* =================================================
+                EMAIL
+            ================================================= */}
 
             <div className="mb-4">
               <label
@@ -455,6 +545,7 @@ function Login() {
                   onChange={handleChange}
                   autoComplete="email"
                   aria-invalid={Boolean(errors.email)}
+                  disabled={isLoading}
                   className={`
                     h-10.75
                     w-full
@@ -472,6 +563,8 @@ function Login() {
                     sm:h-11.25
                     sm:pl-11.75
                     sm:text-[13.5px]
+                    disabled:cursor-not-allowed
+                    disabled:bg-slate-50
                     ${
                       errors.email
                         ? "border-red-400 focus:border-red-500"
@@ -490,7 +583,9 @@ function Login() {
               )}
             </div>
 
-            {/* PASSWORD */}
+            {/* =================================================
+                PASSWORD
+            ================================================= */}
 
             <div className="mb-3">
               <label
@@ -531,6 +626,7 @@ function Login() {
                   onChange={handleChange}
                   autoComplete="current-password"
                   aria-invalid={Boolean(errors.password)}
+                  disabled={isLoading}
                   className={`
                     h-10.75
                     w-full
@@ -548,6 +644,8 @@ function Login() {
                     sm:h-11.25
                     sm:pl-11.75
                     sm:text-[13.5px]
+                    disabled:cursor-not-allowed
+                    disabled:bg-slate-50
                     ${
                       errors.password
                         ? "border-red-400 focus:border-red-500"
@@ -560,7 +658,8 @@ function Login() {
 
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((previous) => !previous)}
+                  disabled={isLoading}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   className="
                     absolute
@@ -590,7 +689,7 @@ function Login() {
             </div>
 
             {/* =================================================
-                REMEMBER + FORGOT
+                REMEMBER / FORGOT
             ================================================= */}
 
             <div
@@ -619,6 +718,7 @@ function Login() {
                     name="rememberMe"
                     checked={formData.rememberMe}
                     onChange={handleChange}
+                    disabled={isLoading}
                     className="
                       peer
                       h-4
@@ -635,6 +735,7 @@ function Login() {
                       focus:outline-none
                       focus:ring-2
                       focus:ring-[#6840DC]/20
+                      disabled:cursor-not-allowed
                     "
                   />
 

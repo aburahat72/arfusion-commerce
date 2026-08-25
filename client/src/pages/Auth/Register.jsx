@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ShoppingCart,
   User,
@@ -9,10 +10,10 @@ import {
   EyeOff,
 } from "lucide-react";
 
+import api from "../../services/api";
+
 function Register() {
-  // =====================================================
-  // STATE
-  // =====================================================
+  const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -26,6 +27,7 @@ function Register() {
   });
 
   const [errors, setErrors] = useState({});
+  const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   // =====================================================
@@ -40,11 +42,16 @@ function Register() {
       [name]: value,
     }));
 
-    if (errors[name]) {
+    if (errors[name] || errors.general) {
       setErrors((previous) => ({
         ...previous,
         [name]: "",
+        general: "",
       }));
+    }
+
+    if (successMessage) {
+      setSuccessMessage("");
     }
   };
 
@@ -95,11 +102,15 @@ function Register() {
   };
 
   // =====================================================
-  // SUBMIT
+  // REGISTER
   // =====================================================
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (isLoading) {
+      return;
+    }
 
     if (!validateForm()) {
       return;
@@ -107,34 +118,71 @@ function Register() {
 
     try {
       setIsLoading(true);
+      setErrors({});
+      setSuccessMessage("");
 
       const registrationData = {
         fullName: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
         password: formData.password,
       };
 
-      console.log("Registration data:", registrationData);
+      console.log("Sending registration request...");
 
-      /*
-       * Connect your backend here.
-       *
-       * Example:
-       *
-       * const response = await axios.post(
-       *   "/api/auth/register",
-       *   registrationData
-       * );
-       *
-       * console.log(response.data);
-       */
+      const response = await api.post("/auth/register", registrationData);
 
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      console.log("Registration response:", response.data);
 
-      console.log("Registration successful");
+      if (!response.data?.success) {
+        setErrors({
+          general:
+            response.data?.message || "Registration failed. Please try again.",
+        });
+
+        return;
+      }
+
+      console.log("Registration successful:", response.data.user);
+
+      setSuccessMessage(
+        "Account created successfully! Redirecting to login...",
+      );
+
+      setFormData({
+        fullName: "",
+        email: "",
+        phone: "",
+        password: "",
+        confirmPassword: "",
+      });
+
+      // Redirect immediately after successful registration.
+      navigate("/login", {
+        replace: true,
+        state: {
+          message: "Registration successful! Please sign in.",
+        },
+      });
     } catch (error) {
       console.error("Registration failed:", error);
+
+      const backendMessage = error.response?.data?.message;
+
+      if (error.response?.status === 400) {
+        setErrors({
+          general: backendMessage || "This email may already be registered.",
+        });
+      } else if (error.response?.status === 429) {
+        setErrors({
+          general: "Too many registration attempts. Please try again later.",
+        });
+      } else {
+        setErrors({
+          general:
+            backendMessage ||
+            "Unable to connect to the server. Please try again.",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -145,16 +193,8 @@ function Register() {
   // =====================================================
 
   const handleGoogleRegister = () => {
-    /*
-     * Connect Google OAuth here.
-     */
-
     console.log("Continue with Google");
   };
-
-  // =====================================================
-  // RENDER
-  // =====================================================
 
   return (
     <main
@@ -179,8 +219,6 @@ function Register() {
           overflow-hidden
         "
       >
-        {/* Left decoration */}
-
         <div
           className="
             absolute
@@ -194,8 +232,6 @@ function Register() {
             sm:-left-72.5
           "
         />
-
-        {/* Top-right dots */}
 
         <div
           className="
@@ -214,8 +250,6 @@ function Register() {
             max-sm:bg-size-[19px_19px]
           "
         />
-
-        {/* Center glow */}
 
         <div
           className="
@@ -256,10 +290,6 @@ function Register() {
           lg:py-8
         "
       >
-        {/* =================================================
-            REGISTER CARD
-        ================================================= */}
-
         <section
           className="
             w-full
@@ -376,6 +406,7 @@ function Register() {
           <button
             type="button"
             onClick={handleGoogleRegister}
+            disabled={isLoading}
             className="
               flex
               h-11.25
@@ -395,6 +426,8 @@ function Register() {
               hover:border-[#C5CAD4]
               hover:shadow-[0_5px_14px_rgba(20,30,50,0.08)]
               active:translate-y-px
+              disabled:cursor-not-allowed
+              disabled:opacity-60
               sm:h-11.75
               sm:text-[14px]
             "
@@ -449,6 +482,48 @@ function Register() {
           ================================================= */}
 
           <form onSubmit={handleSubmit} noValidate>
+            {successMessage && (
+              <div
+                className="
+                  mb-3
+                  rounded-lg
+                  border
+                  border-green-200
+                  bg-green-50
+                  px-3
+                  py-2.5
+                  text-center
+                  text-[11px]
+                  text-green-700
+                  sm:text-xs
+                "
+                role="status"
+              >
+                {successMessage}
+              </div>
+            )}
+
+            {errors.general && (
+              <div
+                className="
+                  mb-3
+                  rounded-lg
+                  border
+                  border-red-200
+                  bg-red-50
+                  px-3
+                  py-2.5
+                  text-center
+                  text-[11px]
+                  text-red-600
+                  sm:text-xs
+                "
+                role="alert"
+              >
+                {errors.general}
+              </div>
+            )}
+
             <FormField
               label="Full Name"
               name="fullName"
@@ -508,10 +583,6 @@ function Register() {
               error={errors.confirmPassword}
               autoComplete="new-password"
             />
-
-            {/* =================================================
-                CREATE ACCOUNT
-            ================================================= */}
 
             <button
               type="submit"
@@ -579,8 +650,9 @@ function Register() {
             "
           >
             Already have an account?{" "}
-            <a
-              href="/login"
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
               className="
                 font-semibold
                 text-[#5D35D3]
@@ -588,7 +660,7 @@ function Register() {
               "
             >
               Sign in
-            </a>
+            </button>
           </p>
 
           {/* =================================================
@@ -637,9 +709,9 @@ function Register() {
   );
 }
 
-// =========================================================
-// NORMAL FORM FIELD
-// =========================================================
+// =====================================================
+// FORM FIELD
+// =====================================================
 
 function FormField({
   label,
@@ -730,9 +802,9 @@ function FormField({
   );
 }
 
-// =========================================================
+// =====================================================
 // PASSWORD FIELD
-// =========================================================
+// =====================================================
 
 function PasswordField({
   label,

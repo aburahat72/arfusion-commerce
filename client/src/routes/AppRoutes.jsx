@@ -32,12 +32,18 @@ import Orders from "../pages/Orders/Orders";
 import Settings from "../pages/Settings/Settings";
 
 // =====================================================
-// AUTHENTICATION PAGES
+// CUSTOMER AUTHENTICATION
 // =====================================================
 
 import Login from "../pages/Auth/Login";
 import Register from "../pages/Auth/Register";
 import ForgotPassword from "../pages/Auth/ForgotPassword";
+
+// =====================================================
+// ADMIN AUTHENTICATION
+// =====================================================
+
+import AdminLogin from "../pages/Auth/AdminLogin";
 
 // =====================================================
 // ADMIN PAGES
@@ -57,6 +63,13 @@ import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
 import AdminReports from "../pages/Admin/Reports/AdminReports";
 import AdminSettings from "../pages/Admin/Settings/AdminSettings";
 import AdminProfile from "../pages/Admin/Profile/AdminProfile";
+
+// =====================================================
+// ROUTE GUARDS
+// =====================================================
+
+import ProtectedRoute from "./ProtectedRoute";
+import AdminRoute from "./AdminRoute";
 
 // =====================================================
 // 404 PAGE
@@ -107,8 +120,7 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* =================================================
-            AUTHENTICATION
-            Dedicated authentication UI
+            CUSTOMER AUTHENTICATION
         ================================================= */}
 
         <Route element={<AuthLayout />}>
@@ -120,22 +132,27 @@ function AppRoutes() {
         </Route>
 
         {/* =================================================
+            ADMIN LOGIN
+            Public route - must stay outside AdminRoute
+        ================================================= */}
+
+        <Route path="/admin/login" element={<AdminLogin />} />
+
+        {/* =================================================
             CUSTOMER
             Uses MainLayout
         ================================================= */}
 
         <Route element={<MainLayout />}>
-          {/* Home */}
+          {/* =================================================
+              PUBLIC CUSTOMER PAGES
+          ================================================= */}
 
           <Route path="/" element={<Home />} />
-
-          {/* Products */}
 
           <Route path="/products" element={<Products />} />
 
           <Route path="/products/:productId" element={<ProductDetails />} />
-
-          {/* Shopping */}
 
           <Route path="/cart" element={<Cart />} />
 
@@ -143,90 +160,94 @@ function AppRoutes() {
 
           <Route path="/compare" element={<Compare />} />
 
-          {/* Profile */}
+          {/* =================================================
+              PROTECTED CUSTOMER PAGES
+          ================================================= */}
 
-          <Route path="/profile" element={<Profile />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/profile" element={<Profile />} />
 
-          <Route
-            path="/profile/personal-information"
-            element={<PersonalInformation />}
-          />
+            <Route
+              path="/profile/personal-information"
+              element={<PersonalInformation />}
+            />
 
-          <Route path="/profile/addresses" element={<Addresses />} />
+            <Route path="/profile/addresses" element={<Addresses />} />
 
-          <Route path="/profile/orders" element={<Orders />} />
+            <Route path="/profile/orders" element={<Orders />} />
 
-          <Route path="/profile/settings" element={<Settings />} />
+            <Route path="/profile/settings" element={<Settings />} />
 
-          {/* Checkout */}
+            <Route path="/checkout" element={<Checkout />} />
 
-          <Route path="/checkout" element={<Checkout />} />
-
-          <Route path="/order-success" element={<OrderSuccess />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
+          </Route>
         </Route>
 
         {/* =================================================
             ADMIN
-            Uses AdminLayout
+            Authentication + admin role required
         ================================================= */}
 
-        <Route element={<AdminLayout />}>
-          {/* Dashboard */}
+        <Route element={<AdminRoute />}>
+          <Route element={<AdminLayout />}>
+            {/* Dashboard */}
 
-          <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />} />
 
-          {/* Orders */}
+            {/* Orders */}
 
-          <Route path="/admin/orders" element={<AdminOrders />} />
+            <Route path="/admin/orders" element={<AdminOrders />} />
 
-          <Route
-            path="/admin/orders/:orderId"
-            element={<AdminOrderDetails />}
-          />
+            <Route
+              path="/admin/orders/:orderId"
+              element={<AdminOrderDetails />}
+            />
 
-          {/* Products */}
+            {/* Products */}
 
-          <Route path="/admin/products" element={<AdminProducts />} />
+            <Route path="/admin/products" element={<AdminProducts />} />
 
-          {/* Customers */}
+            {/* Inventory */}
 
-          <Route path="/admin/customers" element={<AdminCustomers />} />
+            <Route path="/admin/inventory" element={<AdminInventory />} />
 
-          {/* Inventory */}
+            {/* Customers */}
 
-          <Route path="/admin/inventory" element={<AdminInventory />} />
+            <Route path="/admin/customers" element={<AdminCustomers />} />
 
-          {/* Reviews */}
+            {/* Reviews */}
 
-          <Route path="/admin/reviews" element={<AdminReviews />} />
+            <Route path="/admin/reviews" element={<AdminReviews />} />
 
-          {/* Categories */}
+            {/* Categories */}
 
-          <Route path="/admin/categories" element={<AdminCategories />} />
+            <Route path="/admin/categories" element={<AdminCategories />} />
 
-          {/* Coupons */}
+            {/* Coupons */}
 
-          <Route path="/admin/coupons" element={<AdminCoupons />} />
+            <Route path="/admin/coupons" element={<AdminCoupons />} />
 
-          {/* Banners */}
+            {/* Banners */}
 
-          <Route path="/admin/banners" element={<AdminBanners />} />
+            <Route path="/admin/banners" element={<AdminBanners />} />
 
-          {/* Analytics */}
+            {/* Analytics */}
 
-          <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            <Route path="/admin/analytics" element={<AdminAnalytics />} />
 
-          {/* Reports */}
+            {/* Reports */}
 
-          <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/admin/reports" element={<AdminReports />} />
 
-          {/* Settings */}
+            {/* Settings */}
 
-          <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
 
-          {/* Admin Profile */}
+            {/* Admin Profile */}
 
-          <Route path="/admin/profile" element={<AdminProfile />} />
+            <Route path="/admin/profile" element={<AdminProfile />} />
+          </Route>
         </Route>
 
         {/* =================================================
