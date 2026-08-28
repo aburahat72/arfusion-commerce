@@ -1,3 +1,7 @@
+// =====================================================
+// ADMIN SIDEBAR
+// =====================================================
+
 import {
   BarChart3,
   ChevronDown,
@@ -19,12 +23,54 @@ import {
 
 import { NavLink, useNavigate } from "react-router-dom";
 
+// =====================================================
+// ADMIN AUTHENTICATION
+// =====================================================
+
+import { useAdminAuth } from "../../context/AdminAuthContext";
+
 function AdminSidebar({ mobileOpen = false, onClose }) {
   const navigate = useNavigate();
+
+  // =====================================================
+  // ADMIN AUTH CONTEXT
+  // =====================================================
+  // IMPORTANT:
+  // Use ADMIN authentication only.
+  // Do NOT use the customer AuthContext here.
+  // =====================================================
+
+  const { logoutAdmin } = useAdminAuth();
+
+  // =====================================================
+  // NAVIGATION HELPER
+  // =====================================================
 
   const goTo = (path) => {
     onClose?.();
     navigate(path);
+  };
+
+  // =====================================================
+  // ADMIN SIGN OUT
+  // =====================================================
+  // Clears only:
+  //   arfusion_admin_token
+  //   arfusion_admin_user
+  //
+  // Customer authentication remains untouched.
+  // =====================================================
+
+  const handleAdminLogout = () => {
+    onClose?.();
+
+    // Clear admin session
+    logoutAdmin();
+
+    // Redirect to ADMIN login only
+    navigate("/admin/login", {
+      replace: true,
+    });
   };
 
   return (
@@ -101,7 +147,9 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             </div>
           </button>
 
-          {/* Mobile close */}
+          {/* =================================================
+              MOBILE CLOSE
+          ================================================= */}
 
           <button
             type="button"
@@ -130,7 +178,9 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
         ================================================= */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {/* Dashboard */}
+          {/* =================================================
+              DASHBOARD
+          ================================================= */}
 
           <AdminNavItem
             to="/admin"
@@ -138,6 +188,10 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             label="Dashboard"
             onClose={onClose}
           />
+
+          {/* =================================================
+              SALES
+          ================================================= */}
 
           <NavSection label="Sales" />
 
@@ -162,6 +216,10 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             label="Reviews"
             onClose={onClose}
           />
+
+          {/* =================================================
+              CATALOG
+          ================================================= */}
 
           <NavSection label="Catalog" />
 
@@ -203,6 +261,10 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             onClose={onClose}
           />
 
+          {/* =================================================
+              ANALYTICS
+          ================================================= */}
+
           <NavSection label="Analytics" />
 
           <AdminNavItem
@@ -218,6 +280,10 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             label="Reports"
             onClose={onClose}
           />
+
+          {/* =================================================
+              SETTINGS
+          ================================================= */}
 
           <NavSection label="Settings" />
 
@@ -237,16 +303,13 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
         </nav>
 
         {/* =================================================
-            LOGOUT
+            ADMIN LOGOUT
         ================================================= */}
 
         <div className="shrink-0 border-t border-outline-variant p-3">
           <button
             type="button"
-            onClick={() => {
-              onClose?.();
-              navigate("/login");
-            }}
+            onClick={handleAdminLogout}
             className="
               flex
               w-full

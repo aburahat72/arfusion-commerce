@@ -13,12 +13,13 @@ import {
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import api from "../../services/api";
-import { saveAuth } from "../../utils/authStorage";
+import adminApi from "../../services/adminApi";
+import { useAdminAuth } from "../../context/AdminAuthContext";
 
 function AdminLogin() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { loginAdmin } = useAdminAuth();
 
   const [formData, setFormData] = useState({
     email: "",
@@ -59,7 +60,7 @@ function AdminLogin() {
     try {
       setLoading(true);
 
-      const response = await api.post("/auth/login", {
+      const response = await adminApi.post("/auth/admin/login", {
         email,
         password,
       });
@@ -76,7 +77,7 @@ function AdminLogin() {
         return;
       }
 
-      saveAuth(token, user);
+      loginAdmin(token, user);
 
       const redirectPath = location.state?.from?.pathname || "/admin";
 

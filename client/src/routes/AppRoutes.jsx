@@ -22,7 +22,7 @@ import Wishlist from "../pages/Wishlist/Wishlist";
 import Compare from "../pages/Compare/Compare";
 
 // =====================================================
-// PROFILE PAGES
+// CUSTOMER PROFILE PAGES
 // =====================================================
 
 import Profile from "../pages/Profile/Profile";
@@ -68,7 +68,10 @@ import AdminProfile from "../pages/Admin/Profile/AdminProfile";
 // ROUTE GUARDS
 // =====================================================
 
+// Customer authentication guard
 import ProtectedRoute from "./ProtectedRoute";
+
+// Admin authentication + role guard
 import AdminRoute from "./AdminRoute";
 
 // =====================================================
@@ -121,6 +124,7 @@ function AppRoutes() {
       <Routes>
         {/* =================================================
             CUSTOMER AUTHENTICATION
+            Public routes
         ================================================= */}
 
         <Route element={<AuthLayout />}>
@@ -132,20 +136,20 @@ function AppRoutes() {
         </Route>
 
         {/* =================================================
-            ADMIN LOGIN
-            Public route - must stay outside AdminRoute
+            ADMIN AUTHENTICATION
+            Completely separate from customer authentication
         ================================================= */}
 
         <Route path="/admin/login" element={<AdminLogin />} />
 
         {/* =================================================
-            CUSTOMER
+            CUSTOMER ROUTES
             Uses MainLayout
         ================================================= */}
 
         <Route element={<MainLayout />}>
           {/* =================================================
-              PUBLIC CUSTOMER PAGES
+              PUBLIC CUSTOMER ROUTES
           ================================================= */}
 
           <Route path="/" element={<Home />} />
@@ -161,10 +165,16 @@ function AppRoutes() {
           <Route path="/compare" element={<Compare />} />
 
           {/* =================================================
-              PROTECTED CUSTOMER PAGES
+              PROTECTED CUSTOMER ROUTES
+
+              Requires:
+              - Customer JWT
+              - Valid customer session
           ================================================= */}
 
           <Route element={<ProtectedRoute />}>
+            {/* Customer Profile */}
+
             <Route path="/profile" element={<Profile />} />
 
             <Route
@@ -178,24 +188,42 @@ function AppRoutes() {
 
             <Route path="/profile/settings" element={<Settings />} />
 
+            {/* Customer Checkout */}
+
             <Route path="/checkout" element={<Checkout />} />
+
+            {/* Order Success */}
 
             <Route path="/order-success" element={<OrderSuccess />} />
           </Route>
         </Route>
 
         {/* =================================================
-            ADMIN
-            Authentication + admin role required
+            ADMIN ROUTES
+
+            Requires:
+            - Admin JWT
+            - Admin authentication
+            - Admin role
+
+            Admin routes NEVER use ProtectedRoute.
         ================================================= */}
 
         <Route element={<AdminRoute />}>
+          {/* =================================================
+              ADMIN LAYOUT
+          ================================================= */}
+
           <Route element={<AdminLayout />}>
-            {/* Dashboard */}
+            {/* =================================================
+                ADMIN DASHBOARD
+            ================================================= */}
 
             <Route path="/admin" element={<AdminDashboard />} />
 
-            {/* Orders */}
+            {/* =================================================
+                ADMIN ORDERS
+            ================================================= */}
 
             <Route path="/admin/orders" element={<AdminOrders />} />
 
@@ -204,47 +232,69 @@ function AppRoutes() {
               element={<AdminOrderDetails />}
             />
 
-            {/* Products */}
+            {/* =================================================
+                ADMIN PRODUCTS
+            ================================================= */}
 
             <Route path="/admin/products" element={<AdminProducts />} />
 
-            {/* Inventory */}
+            {/* =================================================
+                ADMIN INVENTORY
+            ================================================= */}
 
             <Route path="/admin/inventory" element={<AdminInventory />} />
 
-            {/* Customers */}
+            {/* =================================================
+                ADMIN CUSTOMERS
+            ================================================= */}
 
             <Route path="/admin/customers" element={<AdminCustomers />} />
 
-            {/* Reviews */}
+            {/* =================================================
+                ADMIN REVIEWS
+            ================================================= */}
 
             <Route path="/admin/reviews" element={<AdminReviews />} />
 
-            {/* Categories */}
+            {/* =================================================
+                ADMIN CATEGORIES
+            ================================================= */}
 
             <Route path="/admin/categories" element={<AdminCategories />} />
 
-            {/* Coupons */}
+            {/* =================================================
+                ADMIN COUPONS
+            ================================================= */}
 
             <Route path="/admin/coupons" element={<AdminCoupons />} />
 
-            {/* Banners */}
+            {/* =================================================
+                ADMIN BANNERS
+            ================================================= */}
 
             <Route path="/admin/banners" element={<AdminBanners />} />
 
-            {/* Analytics */}
+            {/* =================================================
+                ADMIN ANALYTICS
+            ================================================= */}
 
             <Route path="/admin/analytics" element={<AdminAnalytics />} />
 
-            {/* Reports */}
+            {/* =================================================
+                ADMIN REPORTS
+            ================================================= */}
 
             <Route path="/admin/reports" element={<AdminReports />} />
 
-            {/* Settings */}
+            {/* =================================================
+                ADMIN SETTINGS
+            ================================================= */}
 
             <Route path="/admin/settings" element={<AdminSettings />} />
 
-            {/* Admin Profile */}
+            {/* =================================================
+                ADMIN PROFILE
+            ================================================= */}
 
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>

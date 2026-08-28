@@ -10,7 +10,7 @@ import {
   EyeOff,
 } from "lucide-react";
 
-import api from "../../services/api";
+import customerApi from "../../services/customerApi";
 
 function Register() {
   const navigate = useNavigate();
@@ -127,11 +127,14 @@ function Register() {
         password: formData.password,
       };
 
-      console.log("Sending registration request...");
+      console.log("Sending customer registration request...");
 
-      const response = await api.post("/auth/register", registrationData);
+      const response = await customerApi.post(
+        "/auth/customer/register",
+        registrationData,
+      );
 
-      console.log("Registration response:", response.data);
+      console.log("Customer registration response:", response.data);
 
       if (!response.data?.success) {
         setErrors({
@@ -142,7 +145,7 @@ function Register() {
         return;
       }
 
-      console.log("Registration successful:", response.data.user);
+      console.log("Customer registration successful:", response.data.user);
 
       setSuccessMessage(
         "Account created successfully! Redirecting to login...",
@@ -164,7 +167,7 @@ function Register() {
         },
       });
     } catch (error) {
-      console.error("Registration failed:", error);
+      console.error("Customer registration failed:", error);
 
       const backendMessage = error.response?.data?.message;
 

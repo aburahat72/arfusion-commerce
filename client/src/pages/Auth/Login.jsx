@@ -1,15 +1,27 @@
+// =====================================================
+// IMPORTS
+// =====================================================
+
 import { useState } from "react";
 import { ShoppingCart, Mail, Lock, Eye, EyeOff, Check } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
-import api from "../../services/api";
+import customerApi from "../../services/customerApi";
+
+// =====================================================
+// CUSTOMER LOGIN COMPONENT
+// =====================================================
 
 function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
   const { login } = useAuth();
+
+  // =====================================================
+  // LOGIN UI STATE
+  // =====================================================
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -24,7 +36,7 @@ function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   // =====================================================
-  // INPUT CHANGE
+  // HANDLE INPUT CHANGE
   // =====================================================
 
   const handleChange = (event) => {
@@ -49,7 +61,7 @@ function Login() {
   };
 
   // =====================================================
-  // VALIDATION
+  // CUSTOMER LOGIN FORM VALIDATION
   // =====================================================
 
   const validateForm = () => {
@@ -73,7 +85,7 @@ function Login() {
   };
 
   // =====================================================
-  // LOGIN
+  // CUSTOMER LOGIN API
   // =====================================================
 
   const handleSubmit = async (event) => {
@@ -92,17 +104,19 @@ function Login() {
       setErrors({});
       setSuccessMessage("");
 
+      // Prepare customer login request
       const loginData = {
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
       };
 
-      console.log("Sending login request...");
+      // Customer authentication endpoint
+      const response = await customerApi.post(
+        "/auth/customer/login",
+        loginData,
+      );
 
-      const response = await api.post("/auth/login", loginData);
-
-      console.log("Login response:", response.data);
-
+      // Check backend response
       if (!response.data?.success) {
         setErrors({
           general:
@@ -115,6 +129,7 @@ function Login() {
 
       const { token, user } = response.data;
 
+      // Validate authentication response
       if (!token || !user) {
         setErrors({
           general: "Invalid login response from server.",
@@ -123,29 +138,25 @@ function Login() {
         return;
       }
 
-      // Update the central authentication state.
+      // Store customer authentication state
       login(token, user);
-
-      console.log("Login successful");
-      console.log("Authenticated user:", user);
 
       setSuccessMessage("Login successful! Redirecting...");
 
-      // Customer login defaults to home.
-      // If a protected customer page originally
-      // requested login, return to that page.
+      // Return customer to the originally requested page
       const redirectTo = location.state?.from?.pathname || "/";
 
       navigate(redirectTo, {
         replace: true,
       });
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error("Customer login failed:", error);
 
       const status = error.response?.status;
 
       let message = error.response?.data?.message;
 
+      // Handle common customer authentication errors
       if (!message) {
         if (status === 401) {
           message = "Invalid email or password.";
@@ -173,6 +184,10 @@ function Login() {
   const handleGoogleLogin = () => {
     console.log("Continue with Google");
   };
+
+  // =====================================================
+  // CUSTOMER LOGIN UI
+  // =====================================================
 
   return (
     <main
@@ -246,7 +261,7 @@ function Login() {
       </div>
 
       {/* =================================================
-          PAGE
+          LOGIN PAGE CONTAINER
       ================================================= */}
 
       <div
@@ -286,7 +301,7 @@ function Login() {
           "
         >
           {/* =================================================
-              BRAND
+              ARFUSION BRAND
           ================================================= */}
 
           <div
@@ -339,7 +354,7 @@ function Login() {
           </div>
 
           {/* =================================================
-              HEADING
+              LOGIN HEADING
           ================================================= */}
 
           <div
@@ -378,12 +393,13 @@ function Login() {
           </div>
 
           {/* =================================================
-              GOOGLE
+              GOOGLE LOGIN
           ================================================= */}
 
           <button
             type="button"
             onClick={handleGoogleLogin}
+            disabled={isLoading}
             className="
               flex
               h-11.25
@@ -403,6 +419,8 @@ function Login() {
               hover:border-[#C5CAD4]
               hover:shadow-[0_5px_14px_rgba(20,30,50,0.08)]
               active:translate-y-px
+              disabled:cursor-not-allowed
+              disabled:opacity-60
               sm:h-11.75
               sm:text-[14px]
             "
@@ -422,7 +440,7 @@ function Login() {
           </button>
 
           {/* =================================================
-              DIVIDER
+              LOGIN METHOD DIVIDER
           ================================================= */}
 
           <div
@@ -452,11 +470,11 @@ function Login() {
           </div>
 
           {/* =================================================
-              FORM
+              CUSTOMER LOGIN FORM
           ================================================= */}
 
           <form onSubmit={handleSubmit} noValidate>
-            {/* Success */}
+            {/* Server success message */}
 
             {successMessage && (
               <div
@@ -479,7 +497,7 @@ function Login() {
               </div>
             )}
 
-            {/* Error */}
+            {/* Server error message */}
 
             {errors.general && (
               <div
@@ -503,7 +521,7 @@ function Login() {
             )}
 
             {/* =================================================
-                EMAIL
+                EMAIL FIELD
             ================================================= */}
 
             <div className="mb-4">
@@ -584,7 +602,7 @@ function Login() {
             </div>
 
             {/* =================================================
-                PASSWORD
+                PASSWORD FIELD
             ================================================= */}
 
             <div className="mb-3">
@@ -689,7 +707,7 @@ function Login() {
             </div>
 
             {/* =================================================
-                REMEMBER / FORGOT
+                REMEMBER ME / FORGOT PASSWORD
             ================================================= */}
 
             <div
@@ -771,7 +789,7 @@ function Login() {
             </div>
 
             {/* =================================================
-                SIGN IN
+                SIGN IN BUTTON
             ================================================= */}
 
             <button
@@ -826,7 +844,7 @@ function Login() {
           </form>
 
           {/* =================================================
-              REGISTER
+              REGISTER LINK
           ================================================= */}
 
           <p
@@ -852,7 +870,7 @@ function Login() {
           </p>
 
           {/* =================================================
-              TERMS
+              TERMS AND PRIVACY
           ================================================= */}
 
           <p

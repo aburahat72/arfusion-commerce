@@ -1,11 +1,23 @@
+// =====================================================
+// ADMIN ROUTE GUARD
+// =====================================================
+
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
-import { useAuth } from "../context/AuthContext";
+import { useAdminAuth } from "../context/AdminAuthContext";
+
+// =====================================================
+// ADMIN PROTECTED ROUTE
+// =====================================================
 
 function AdminRoute() {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAdminAuth();
 
   const location = useLocation();
+
+  // =====================================================
+  // CHECKING ADMIN SESSION
+  // =====================================================
 
   if (loading) {
     return (
@@ -21,15 +33,25 @@ function AdminRoute() {
     );
   }
 
-  // Not authenticated → Admin Login
+  // =====================================================
+  // ADMIN NOT AUTHENTICATED
+  // =====================================================
+
   if (!user) {
     return <Navigate to="/admin/login" replace state={{ from: location }} />;
   }
 
-  // Authenticated but not an admin → Customer home
+  // =====================================================
+  // ADMIN ROLE CHECK
+  // =====================================================
+
   if (user.role !== "admin") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
+
+  // =====================================================
+  // ADMIN AUTHENTICATED
+  // =====================================================
 
   return <Outlet />;
 }
