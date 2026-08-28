@@ -7,7 +7,8 @@ import {
   deleteReview,
 } from "../controllers/review.controller.js";
 
-import { protectedRoute } from "../middleware/auth.middleware.js";
+import { protectedRoute } from "../middleware/customerAuth.middleware.js";
+
 import validate from "../middleware/validate.middleware.js";
 
 import {
@@ -18,12 +19,15 @@ import {
 const router = express.Router();
 
 // Add Review
+
 router.post("/", protectedRoute, validate(addReviewSchema), addReview);
 
 // Get Product Reviews
+
 router.get("/:productId", getProductReviews);
 
 // Update Review
+
 router.put(
   "/:reviewId",
   protectedRoute,
@@ -32,6 +36,7 @@ router.put(
 );
 
 // Delete Review
+
 router.delete("/:reviewId", protectedRoute, deleteReview);
 
 export default router;

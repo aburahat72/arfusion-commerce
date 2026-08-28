@@ -10,7 +10,14 @@ import {
   removeCoupon,
 } from "../controllers/coupon.controller.js";
 
-import { protectedRoute, authorize } from "../middleware/auth.middleware.js";
+import {
+  protectedRoute as adminProtectedRoute,
+  authorize as adminAuthorize,
+} from "../middleware/adminAuth.middleware.js";
+
+import {
+  protectedRoute as customerProtectedRoute,
+} from "../middleware/customerAuth.middleware.js";
 
 import validate from "../middleware/validate.middleware.js";
 
@@ -22,36 +29,66 @@ import {
 const router = express.Router();
 
 // Create Coupon (Admin)
+
 router.post(
   "/",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   validate(createCouponSchema),
   createCoupon,
 );
 
 // Get All Coupons (Admin)
-router.get("/", protectedRoute, authorize("admin"), getCoupons);
+
+router.get(
+  "/",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getCoupons,
+);
 
 // Get Single Coupon (Admin)
-router.get("/:couponId", protectedRoute, authorize("admin"), getCoupon);
+
+router.get(
+  "/:couponId",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getCoupon,
+);
 
 // Update Coupon (Admin)
+
 router.put(
   "/:couponId",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   validate(updateCouponSchema),
   updateCoupon,
 );
 
 // Delete Coupon (Admin)
-router.delete("/:couponId", protectedRoute, authorize("admin"), deleteCoupon);
+
+router.delete(
+  "/:couponId",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  deleteCoupon,
+);
 
 // Apply Coupon
-router.post("/apply", protectedRoute, applyCoupon);
+
+router.post(
+  "/apply",
+  customerProtectedRoute,
+  applyCoupon,
+);
 
 // Remove Coupon
-router.post("/remove", protectedRoute, removeCoupon);
+
+router.post(
+  "/remove",
+  customerProtectedRoute,
+  removeCoupon,
+);
 
 export default router;

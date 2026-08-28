@@ -10,52 +10,69 @@ import {
   completeReplacement,
 } from "../controllers/return.controller.js";
 
-import { protectedRoute, authorize } from "../middleware/auth.middleware.js";
+import { protectedRoute as customerProtectedRoute } from "../middleware/customerAuth.middleware.js";
+
+import {
+  protectedRoute as adminProtectedRoute,
+  authorize as adminAuthorize,
+} from "../middleware/adminAuth.middleware.js";
 
 const router = express.Router();
 
 // Customer Routes
 
 // Request Return
-router.post("/:orderId", protectedRoute, requestReturn);
+
+router.post("/:orderId", customerProtectedRoute, requestReturn);
 
 // Get My Return Requests
-router.get("/my", protectedRoute, getMyReturnRequests);
+
+router.get("/my", customerProtectedRoute, getMyReturnRequests);
 
 // Admin Routes
 
 // Get All Return Requests
-router.get("/", protectedRoute, authorize("admin"), getAllReturnRequests);
+
+router.get(
+  "/",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getAllReturnRequests,
+);
 
 // Approve Return Request
+
 router.put(
   "/:orderId/approve",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   approveReturn,
 );
 
 // Reject Return Request
+
 router.put(
   "/:orderId/reject",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   rejectReturn,
 );
 
 // Complete Refund
+
 router.put(
   "/:orderId/complete-refund",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   completeRefund,
 );
 
 // Complete Replacement
+
 router.put(
   "/:orderId/complete-replacement",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   completeReplacement,
 );
 

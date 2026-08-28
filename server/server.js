@@ -12,7 +12,8 @@ import connectDB from "./src/config/db.js";
 // API rate limiter middleware
 import { apiLimiter } from "./src/middleware/rateLimit.middleware.js";
 
-import authRoutes from "./src/routes/auth.routes.js";
+import customerAuthRoutes from "./src/routes/customerAuth.routes.js";
+import adminAuthRoutes from "./src/routes/adminAuth.routes.js";
 import productRoutes from "./src/routes/product.routes.js";
 import cartRoutes from "./src/routes/cart.routes.js";
 import orderRoutes from "./src/routes/order.routes.js";
@@ -51,7 +52,6 @@ app.use(
   }),
 );
 
-
 // Body parsers
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -67,7 +67,8 @@ app.use(morgan("dev"));
 app.use("/api", apiLimiter);
 
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth/customer", customerAuthRoutes);
+app.use("/api/auth/admin", adminAuthRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/wishlist", wishlistRoutes);

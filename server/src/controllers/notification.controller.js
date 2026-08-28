@@ -67,7 +67,25 @@ export const markAsRead = async (req, res) => {
       });
     }
 
-    const notification = await markNotificationAsRead(notificationId);
+    let filter;
+
+    // Admin can only mark admin notifications
+    if (req.user.role === "admin") {
+      filter = {
+        recipient: "admin",
+      };
+    } else {
+      // Customer can only mark their own customer notifications
+      filter = {
+        recipient: "customer",
+        user: req.user._id,
+      };
+    }
+
+    const notification = await markNotificationAsRead(
+      notificationId,
+      filter,
+    );
 
     if (!notification) {
       return res.status(404).json({
@@ -131,7 +149,25 @@ export const deleteNotification = async (req, res) => {
       });
     }
 
-    const notification = await deleteNotificationService(notificationId);
+    let filter;
+
+    // Admin can only delete admin notifications
+    if (req.user.role === "admin") {
+      filter = {
+        recipient: "admin",
+      };
+    } else {
+      // Customer can only delete their own customer notifications
+      filter = {
+        recipient: "customer",
+        user: req.user._id,
+      };
+    }
+
+    const notification = await deleteNotificationService(
+      notificationId,
+      filter,
+    );
 
     if (!notification) {
       return res.status(404).json({

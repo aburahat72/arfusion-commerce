@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   placeOrder,
   getMyOrders,
@@ -8,7 +9,15 @@ import {
   updateOrderStatus,
 } from "../controllers/order.controller.js";
 
-import { protectedRoute, authorize } from "../middleware/auth.middleware.js";
+import {
+  protectedRoute as customerProtectedRoute,
+} from "../middleware/customerAuth.middleware.js";
+
+import {
+  protectedRoute as adminProtectedRoute,
+  authorize as adminAuthorize,
+} from "../middleware/adminAuth.middleware.js";
+
 import validate from "../middleware/validate.middleware.js";
 
 import {
@@ -19,25 +28,45 @@ import {
 const router = express.Router();
 
 // Place order
-router.post("/", protectedRoute, validate(createOrderSchema), placeOrder);
+
+router.post(
+  "/",
+  customerProtectedRoute,
+  validate(createOrderSchema),
+  placeOrder,
+);
 
 // Get logged-in user's orders
-router.get("/my-orders", protectedRoute, getMyOrders);
+
+router.get("/my-orders", customerProtectedRoute, getMyOrders);
 
 // Get single order
-router.get("/:orderId", protectedRoute, getOrderById);
+
+router.get("/:orderId", customerProtectedRoute, getOrderById);
 
 // Cancel order
-router.patch("/:orderId/cancel", protectedRoute, cancelOrder);
+
+router.patch(
+  "/:orderId/cancel",
+  customerProtectedRoute,
+  cancelOrder,
+);
 
 // Admin - Get all orders
-router.get("/", protectedRoute, authorize("admin"), getAllOrders);
+
+router.get(
+  "/",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getAllOrders,
+);
 
 // Admin - Update order status
+
 router.patch(
   "/:orderId/status",
-  protectedRoute,
-  authorize("admin"),
+  adminProtectedRoute,
+  adminAuthorize("admin"),
   validate(updateOrderStatusSchema),
   updateOrderStatus,
 );

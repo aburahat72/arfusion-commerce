@@ -74,6 +74,10 @@ export const createPaymentOrder = async (req, res) => {
 export const verifyPayment = async (req, res) => {
   try {
     // Logic started
+
+    // Get logged-in user ID
+    const userId = req.user._id;
+
     // Get payment details
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       req.body;
@@ -100,16 +104,44 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    // Find order using receipt
+    // Find Razorpay order
     const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
 
-    const order = await Order.findById(razorpayOrder.receipt);
+    // Get order ID from Razorpay receipt
+    const orderId = razorpayOrder.receipt;
 
-    // Check whether order exists
+    // Check whether receipt contains a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order reference",
+      });
+    }
+
+    // Find user's order
+    //
+    // IMPORTANT:
+    // The order must belong to the currently authenticated
+    // customer. This prevents one customer from verifying
+    // or modifying another customer's order.
+    const order = await Order.findOne({
+      _id: orderId,
+      user: userId,
+    });
+
+    // Check whether order exists and belongs to logged-in customer
     if (!order) {
       return res.status(404).json({
         success: false,
         message: "Order not found",
+      });
+    }
+
+    // Check whether payment is already completed
+    if (order.paymentStatus === "Paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Order is already paid",
       });
     }
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 // Register Schema validation
+
 export const registerSchema = z.object({
   fullName: z
     .string()
@@ -17,6 +18,7 @@ export const registerSchema = z.object({
 });
 
 // Login schema validation
+
 export const loginSchema = z.object({
   email: z.string().trim().email("Please provide a valid email").toLowerCase(),
 

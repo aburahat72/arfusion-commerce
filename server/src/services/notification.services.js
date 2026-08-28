@@ -62,10 +62,16 @@ export const getUnreadNotificationCount = async (filter = {}) => {
 };
 
 // Mark Notification As Read
-export const markNotificationAsRead = async (notificationId) => {
+export const markNotificationAsRead = async (
+  notificationId,
+  filter = {},
+) => {
   try {
-    const notification = await Notification.findByIdAndUpdate(
-      notificationId,
+    const notification = await Notification.findOneAndUpdate(
+      {
+        _id: notificationId,
+        ...filter,
+      },
       {
         isRead: true,
       },
@@ -102,9 +108,15 @@ export const markAllNotificationsAsRead = async (filter = {}) => {
 };
 
 // Delete Notification
-export const deleteNotification = async (notificationId) => {
+export const deleteNotification = async (
+  notificationId,
+  filter = {},
+) => {
   try {
-    const notification = await Notification.findByIdAndDelete(notificationId);
+    const notification = await Notification.findOneAndDelete({
+      _id: notificationId,
+      ...filter,
+    });
 
     return notification;
   } catch (error) {
