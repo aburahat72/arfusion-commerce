@@ -35,9 +35,10 @@ const productSchema = new mongoose.Schema(
     },
 
     category: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: [true, "Product category is required"],
-      trim: true,
+      index: true,
     },
 
     images: {
@@ -47,12 +48,14 @@ const productSchema = new mongoose.Schema(
             type: String,
             required: true,
           },
+
           publicId: {
             type: String,
             required: true,
           },
         },
       ],
+
       default: [],
     },
 
@@ -61,6 +64,7 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
   },
+
   {
     timestamps: true,
   },

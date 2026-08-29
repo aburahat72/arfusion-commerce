@@ -3,9 +3,12 @@ import express from "express";
 import {
   createProduct,
   getAllProducts,
+  getAllAdminProducts,
   getProductById,
+  getAdminProductById,
   updateProduct,
   deleteProduct,
+  toggleProductStatus,
 } from "../controllers/product.controller.js";
 
 import {
@@ -24,15 +27,31 @@ import upload from "../middleware/upload.middleware.js";
 
 const router = express.Router();
 
-// Get all active products - Public (product routes)
+// =====================================================
+// PUBLIC
+// =====================================================
 
 router.get("/", getAllProducts);
 
-// Get single product by ID - Public
-
 router.get("/:id", getProductById);
 
-// Create product - Admin only (product routes)
+// =====================================================
+// ADMIN
+// =====================================================
+
+router.get(
+  "/admin/all",
+  protectedRoute,
+  authorize("admin"),
+  getAllAdminProducts,
+);
+
+router.get(
+  "/admin/:id",
+  protectedRoute,
+  authorize("admin"),
+  getAdminProductById,
+);
 
 router.post(
   "/",
@@ -43,8 +62,6 @@ router.post(
   createProduct,
 );
 
-// Update product - Admin only
-
 router.patch(
   "/:id",
   protectedRoute,
@@ -54,13 +71,13 @@ router.patch(
   updateProduct,
 );
 
-// Delete product - Admin only
-
-router.delete(
-  "/:id",
+router.patch(
+  "/:id/status",
   protectedRoute,
   authorize("admin"),
-  deleteProduct,
+  toggleProductStatus,
 );
+
+router.delete("/:id", protectedRoute, authorize("admin"), deleteProduct);
 
 export default router;

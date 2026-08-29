@@ -1,26 +1,41 @@
 import mongoose from "mongoose";
 
 import cloudinary from "../config/cloudinary.js";
+
 import Product from "../models/product.model.js";
+import Category from "../models/category.model.js";
+
 import { uploadToCloudinary } from "../../utils/cloudinaryUpload.js";
 
-// Create Product - Admin only
-export const createProduct = async (req, res) => {
+// =====================================================
+// HELPERS
+// =====================================================
+
+const isValidObjectId = (id) => {
+  return mongoose.Types.ObjectId.isValid(id);
+};
+
+const deleteCloudinaryImages = async (images = []) => {
+  if (!images.length) {
+    return;
+  }
+
+  await Promise.allSettled(
+    images
+      .filter((image) => image?.publicId)
+      .map((image) => cloudinary.uploader.destroy(image.publicId)),
+  );
+};
+
+const uploadProductImages = async (files = []) => {
+  if (!files.length) {
+    return [];
+  }
+
   const uploadedImages = [];
 
   try {
-    const { name, description, price, stock, category, isActive } = req.body;
-
-    // Check if images were uploaded
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one image is required",
-      });
-    }
-
-    // Upload images to Cloudinary
-    for (const file of req.files) {
+    for (const file of files) {
       const result = await uploadToCloudinary(file.buffer, "arfusion/products");
 
       uploadedImages.push({
@@ -29,173 +44,103 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Create product in MongoDB
-    const product = await Product.create({
-      name,
-      description,
-      price,
-      stock,
-      category,
-      images: uploadedImages,
-      ...(isActive !== undefined && { isActive }),
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      product,
-    });
+    return uploadedImages;
   } catch (error) {
-    console.error("Create Product Error:", error);
+    await deleteCloudinaryImages(uploadedImages);
 
-    // Rollback Cloudinary uploads if product creation fails
-    if (uploadedImages.length > 0) {
-      await Promise.allSettled(
-        uploadedImages.map((image) =>
-          cloudinary.uploader.destroy(image.publicId),
-        ),
-      );
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    throw error;
   }
 };
 
-// Get all active products with search - Public route
+const getActiveCategory = async (categoryId) => {
+  if (!isValidObjectId(categoryId)) {
+    return null;
+  }
+
+  return Category.findOne({
+    _id: categoryId,
+    isActive: true,
+  });
+};
+
+// =====================================================
+// GET ALL ACTIVE PRODUCTS
+// PUBLIC
+// =====================================================
+
 export const getAllProducts = async (req, res) => {
   try {
-    //  Get search value from the query parameters
     const {
       search,
       category,
       minPrice,
       maxPrice,
-      sort,
       page = 1,
-      limit = 10,
+      limit = 20,
     } = req.query;
 
-    // Base filter - always show only active products
     const filter = {
       isActive: true,
     };
-    // If user provides a search value, search by name or description
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
 
-    // Filter products by category
-    if (category) {
-      filter.category = {
-        $regex: `^${category}$`,
+    if (search?.trim()) {
+      filter.name = {
+        $regex: search.trim(),
         $options: "i",
       };
     }
 
-    // Filter products by price range
-    if (minPrice || maxPrice) {
-      const min = minPrice ? Number(minPrice) : undefined;
-      const max = maxPrice ? Number(maxPrice) : undefined;
-
-      // Check if price values are valid numbers
-      if ((minPrice && Number.isNaN(min)) || (maxPrice && Number.isNaN(max))) {
+    if (category) {
+      if (!isValidObjectId(category)) {
         return res.status(400).json({
           success: false,
-          message: "Price must be a valid number",
+          message: "Invalid category ID",
         });
       }
 
-      // Prevent negative price values
-      if ((min !== undefined && min < 0) || (max !== undefined && max < 0)) {
-        return res.status(400).json({
-          success: false,
-          message: "Price cannot be negative",
-        });
-      }
+      filter.category = category;
+    }
 
-      // Minimum price cannot be greater than maximum price
-      if (min !== undefined && max !== undefined && min > max) {
-        return res.status(400).json({
-          success: false,
-          message: "Minimum price cannot be greater than maximum price",
-        });
-      }
-
-      // Create MongoDB price filter
+    if (minPrice !== undefined || maxPrice !== undefined) {
       filter.price = {};
 
-      if (min !== undefined) {
-        filter.price.$gte = min;
+      if (minPrice !== undefined) {
+        filter.price.$gte = Number(minPrice);
       }
 
-      if (max !== undefined) {
-        filter.price.$lte = max;
+      if (maxPrice !== undefined) {
+        filter.price.$lte = Number(maxPrice);
       }
     }
 
-    // Default sorting - newest products first
-    let sortOption = {
-      createdAt: -1,
-    };
+    const currentPage = Math.max(Number(page) || 1, 1);
 
-    // Apply requested sorting
-    if (sort === "price_asc") {
-      sortOption = { price: 1 };
-    } else if (sort === "price_desc") {
-      sortOption = { price: -1 };
-    } else if (sort === "oldest") {
-      sortOption = { createdAt: 1 };
-    } else if (sort === "newest") {
-      sortOption = { createdAt: -1 };
-    }
+    const itemsPerPage = Math.min(Math.max(Number(limit) || 20, 1), 100);
 
-    // Pagination
-    const pageNumber = Number(page);
-    const limitNumber = Number(limit);
+    const skip = (currentPage - 1) * itemsPerPage;
 
-    // Validate page and limit
-    if (
-      !Number.isInteger(pageNumber) ||
-      !Number.isInteger(limitNumber) ||
-      pageNumber < 1 ||
-      limitNumber < 1
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Page and limit must be positive integers",
-      });
-    }
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .populate("category", "name slug image isActive")
+        .sort({
+          createdAt: -1,
+        })
+        .skip(skip)
+        .limit(itemsPerPage),
 
-    // Calculate how many products to skip
-    const skip = (pageNumber - 1) * limitNumber;
+      Product.countDocuments(filter),
+    ]);
 
-    // Get total number of matching products
-    const totalProducts = await Product.countDocuments(filter);
-
-    // Fetch, filter, sorting and pagination products
-    // Fetch matching products using the filter
-    const products = await Product.find(filter)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNumber);
-
-    // Return matching products
     return res.status(200).json({
       success: true,
       count: products.length,
-      totalProducts,
-      currentPage: pageNumber,
-      totalPages: Math.ceil(totalProducts / limitNumber),
+      total,
+      page: currentPage,
+      pages: Math.ceil(total / itemsPerPage),
       products,
     });
   } catch (error) {
-    console.error("Get product Error:", error);
+    console.error("Get All Products Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -204,27 +149,111 @@ export const getAllProducts = async (req, res) => {
   }
 };
 
-// Get a single active product by ID - Public
+// =====================================================
+// GET ALL PRODUCTS
+// ADMIN
+// =====================================================
+
+export const getAllAdminProducts = async (req, res) => {
+  try {
+    const { search, category, stock, page = 1, limit = 100 } = req.query;
+
+    const filter = {};
+
+    if (search?.trim()) {
+      filter.name = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+    }
+
+    if (category) {
+      if (!isValidObjectId(category)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid category ID",
+        });
+      }
+
+      filter.category = category;
+    }
+
+    if (stock === "in-stock") {
+      filter.stock = {
+        $gt: 0,
+      };
+    }
+
+    if (stock === "low-stock") {
+      filter.stock = {
+        $gt: 0,
+        $lte: 10,
+      };
+    }
+
+    if (stock === "out-of-stock") {
+      filter.stock = {
+        $lte: 0,
+      };
+    }
+
+    const currentPage = Math.max(Number(page) || 1, 1);
+
+    const itemsPerPage = Math.min(Math.max(Number(limit) || 100, 1), 100);
+
+    const skip = (currentPage - 1) * itemsPerPage;
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .populate("category", "name slug image isActive")
+        .sort({
+          createdAt: -1,
+        })
+        .skip(skip)
+        .limit(itemsPerPage),
+
+      Product.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      total,
+      page: currentPage,
+      pages: Math.ceil(total / itemsPerPage),
+      products,
+    });
+  } catch (error) {
+    console.error("Get Admin Products Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// =====================================================
+// GET SINGLE PRODUCT
+// PUBLIC
+// =====================================================
+
 export const getProductById = async (req, res) => {
   try {
-    // Get product ID from URL parameters
     const { id } = req.params;
 
-    // check if ID is a valid MongoDB ObjectID
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid product ID",
       });
     }
 
-    // Find active product by its MongoDB ID
     const product = await Product.findOne({
       _id: id,
       isActive: true,
-    });
+    }).populate("category", "name slug image isActive");
 
-    // Check if product exists
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -232,7 +261,6 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    // Return the product
     return res.status(200).json({
       success: true,
       product,
@@ -247,25 +275,27 @@ export const getProductById = async (req, res) => {
   }
 };
 
-// Update product by ID - Admin only
-// Update product by ID - Admin only
-export const updateProduct = async (req, res) => {
-  const uploadedImages = [];
+// =====================================================
+// GET SINGLE PRODUCT
+// ADMIN
+// Includes inactive products
+// =====================================================
 
+export const getAdminProductById = async (req, res) => {
   try {
-    // Get product ID from URL parameters
     const { id } = req.params;
 
-    // Check whether ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid product ID",
       });
     }
 
-    // Find existing product
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).populate(
+      "category",
+      "name slug image isActive",
+    );
 
     if (!product) {
       return res.status(404).json({
@@ -274,88 +304,90 @@ export const updateProduct = async (req, res) => {
       });
     }
 
-    // Get validated fields from request body
-    const {
+    return res.status(200).json({
+      success: true,
+      product,
+    });
+  } catch (error) {
+    console.error("Get Admin Product Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// =====================================================
+// CREATE PRODUCT
+// ADMIN
+// =====================================================
+
+export const createProduct = async (req, res) => {
+  let uploadedImages = [];
+
+  try {
+    const { name, description, price, stock, category, isActive } = req.body;
+
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: "Product category is required",
+      });
+    }
+
+    const categoryDocument = await getActiveCategory(category);
+
+    if (!categoryDocument) {
+      return res.status(400).json({
+        success: false,
+        message: "Category not found or inactive",
+      });
+    }
+
+    if (req.files?.length) {
+      uploadedImages = await uploadProductImages(req.files);
+    }
+
+    const product = await Product.create({
       name,
       description,
       price,
       stock,
-      category,
-      isActive,
-    } = req.body;
+      category: categoryDocument._id,
+      images: uploadedImages,
 
-    // Prepare fields to update
-    const updateData = {};
+      ...(isActive !== undefined && {
+        isActive,
+      }),
+    });
 
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (price !== undefined) updateData.price = price;
-    if (stock !== undefined) updateData.stock = stock;
-    if (category !== undefined) updateData.category = category;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    await product.populate("category", "name slug image isActive");
 
-    // Keep old images before replacing them
-    const oldImages = product.images || [];
-
-    // Check if new images were uploaded
-    if (req.files && req.files.length > 0) {
-      // Upload new images to Cloudinary
-      for (const file of req.files) {
-        const result = await uploadToCloudinary(
-          file.buffer,
-          "arfusion/products"
-        );
-
-        uploadedImages.push({
-          url: result.secure_url,
-          publicId: result.public_id,
-        });
-      }
-
-      // Replace old images with new images
-      updateData.images = uploadedImages;
-    }
-
-    // Update MongoDB FIRST
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      updateData,
-      {
-        new: true,
-        runValidators: true,
-      }
-    );
-
-    // If MongoDB update somehow failed
-    if (!updatedProduct) {
-      throw new Error("Product update failed");
-    }
-
-    // MongoDB update succeeded.
-    // Now delete old images from Cloudinary.
-    if (req.files && req.files.length > 0 && oldImages.length > 0) {
-      await Promise.allSettled(
-        oldImages.map((image) =>
-          cloudinary.uploader.destroy(image.publicId)
-        )
-      );
-    }
-
-    return res.status(200).json({
+    return res.status(201).json({
       success: true,
-      message: "Product updated successfully",
-      product: updatedProduct,
+      message: "Product created successfully",
+      product,
     });
   } catch (error) {
-    console.error("Update Product Error:", error);
+    console.error("Create Product Error:", error);
 
-    // Rollback newly uploaded images if update failed
-    if (uploadedImages.length > 0) {
-      await Promise.allSettled(
-        uploadedImages.map((image) =>
-          cloudinary.uploader.destroy(image.publicId)
-        )
-      );
+    await deleteCloudinaryImages(uploadedImages);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Product already exists",
+      });
+    }
+
+    if (error instanceof mongoose.Error.ValidationError) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(error.errors)
+          .map((item) => item.message)
+          .join(", "),
+      });
     }
 
     return res.status(500).json({
@@ -365,24 +397,26 @@ export const updateProduct = async (req, res) => {
   }
 };
 
-// Delete product by ID - Admin only
-export const deleteProduct = async (req, res) => {
+// =====================================================
+// UPDATE PRODUCT
+// ADMIN
+// =====================================================
+
+export const updateProduct = async (req, res) => {
+  let uploadedImages = [];
+
   try {
-    // Get product ID from URL
     const { id } = req.params;
 
-    // Check whether ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!isValidObjectId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid product ID",
       });
     }
 
-    // Find product first so we can get its Cloudinary images
     const product = await Product.findById(id);
 
-    // Check if product exists
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -390,19 +424,115 @@ export const deleteProduct = async (req, res) => {
       });
     }
 
-    // Delete product images from Cloudinary
-    if (product.images && product.images.length > 0) {
-      await Promise.allSettled(
-        product.images.map((image) =>
-          cloudinary.uploader.destroy(image.publicId),
-        ),
-      );
+    const { name, description, price, stock, category, isActive } = req.body;
+
+    if (category !== undefined) {
+      if (!category) {
+        return res.status(400).json({
+          success: false,
+          message: "Product category is required",
+        });
+      }
+
+      const categoryDocument = await getActiveCategory(category);
+
+      if (!categoryDocument) {
+        return res.status(400).json({
+          success: false,
+          message: "Category not found or inactive",
+        });
+      }
+
+      product.category = categoryDocument._id;
     }
 
-    // Delete product from MongoDB
-    await Product.findByIdAndDelete(id);
+    if (name !== undefined) {
+      product.name = name;
+    }
 
-    // Return success response
+    if (description !== undefined) {
+      product.description = description;
+    }
+
+    if (price !== undefined) {
+      product.price = price;
+    }
+
+    if (stock !== undefined) {
+      product.stock = stock;
+    }
+
+    if (isActive !== undefined) {
+      product.isActive = isActive;
+    }
+
+    if (req.files?.length) {
+      uploadedImages = await uploadProductImages(req.files);
+
+      product.images = [...(product.images || []), ...uploadedImages];
+    }
+
+    await product.save();
+
+    await product.populate("category", "name slug image isActive");
+
+    return res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+      product,
+    });
+  } catch (error) {
+    console.error("Update Product Error:", error);
+
+    await deleteCloudinaryImages(uploadedImages);
+
+    if (error instanceof mongoose.Error.ValidationError) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(error.errors)
+          .map((item) => item.message)
+          .join(", "),
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// =====================================================
+// DELETE PRODUCT
+// ADMIN
+// =====================================================
+
+export const deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID",
+      });
+    }
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    await deleteCloudinaryImages(product.images);
+
+    await Product.deleteOne({
+      _id: id,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Product deleted successfully",
@@ -415,4 +545,63 @@ export const deleteProduct = async (req, res) => {
       message: "Internal server error",
     });
   }
+};
+
+// =====================================================
+// ENABLE / DISABLE PRODUCT
+// ADMIN
+// =====================================================
+
+export const toggleProductStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID",
+      });
+    }
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    product.isActive = !product.isActive;
+
+    await product.save();
+
+    await product.populate("category", "name slug image isActive");
+
+    return res.status(200).json({
+      success: true,
+      message: product.isActive
+        ? "Product enabled successfully"
+        : "Product disabled successfully",
+      product,
+    });
+  } catch (error) {
+    console.error("Toggle Product Status Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export default {
+  createProduct,
+  getAllProducts,
+  getAllAdminProducts,
+  getProductById,
+  getAdminProductById,
+  updateProduct,
+  deleteProduct,
+  toggleProductStatus,
 };

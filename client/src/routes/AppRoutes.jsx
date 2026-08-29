@@ -22,7 +22,7 @@ import Wishlist from "../pages/Wishlist/Wishlist";
 import Compare from "../pages/Compare/Compare";
 
 // =====================================================
-// CUSTOMER PROFILE PAGES
+// CUSTOMER PROFILE
 // =====================================================
 
 import Profile from "../pages/Profile/Profile";
@@ -32,7 +32,7 @@ import Orders from "../pages/Orders/Orders";
 import Settings from "../pages/Settings/Settings";
 
 // =====================================================
-// CUSTOMER AUTHENTICATION
+// CUSTOMER AUTH
 // =====================================================
 
 import Login from "../pages/Auth/Login";
@@ -40,7 +40,7 @@ import Register from "../pages/Auth/Register";
 import ForgotPassword from "../pages/Auth/ForgotPassword";
 
 // =====================================================
-// ADMIN AUTHENTICATION
+// ADMIN AUTH
 // =====================================================
 
 import AdminLogin from "../pages/Auth/AdminLogin";
@@ -52,7 +52,12 @@ import AdminLogin from "../pages/Auth/AdminLogin";
 import AdminDashboard from "../pages/Admin/Dashboard/AdminDashboard";
 import AdminOrders from "../pages/Admin/Orders/AdminOrders";
 import AdminOrderDetails from "../pages/Admin/Orders/AdminOrderDetails";
+
 import AdminProducts from "../pages/Admin/Products/AdminProducts";
+import AdminNewProduct from "../pages/Admin/Products/AdminNewProduct";
+import AdminProductDetails from "../pages/Admin/Products/AdminProductDetails";
+import AdminEditProduct from "../pages/Admin/Products/AdminEditProduct";
+
 import AdminInventory from "../pages/Admin/Inventory/AdminInventory";
 import AdminCustomers from "../pages/Admin/Customers/AdminCustomers";
 import AdminReviews from "../pages/Admin/Reviews/AdminReviews";
@@ -66,6 +71,10 @@ import AdminNewCategory from "../pages/Admin/Categories/AdminNewCategory";
 import AdminEditCategory from "../pages/Admin/Categories/AdminEditCategory";
 import AdminCategoryDetails from "../pages/Admin/Categories/AdminCategoryDetails";
 
+// =====================================================
+// OTHER ADMIN PAGES
+// =====================================================
+
 import AdminCoupons from "../pages/Admin/Coupons/AdminCoupons";
 import AdminBanners from "../pages/Admin/Banners/AdminBanners";
 import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
@@ -77,14 +86,11 @@ import AdminProfile from "../pages/Admin/Profile/AdminProfile";
 // ROUTE GUARDS
 // =====================================================
 
-// Customer authentication guard
 import ProtectedRoute from "./ProtectedRoute";
-
-// Admin authentication + role guard
 import AdminRoute from "./AdminRoute";
 
 // =====================================================
-// 404 PAGE
+// 404
 // =====================================================
 
 function NotFound() {
@@ -132,8 +138,7 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         {/* =================================================
-            CUSTOMER AUTHENTICATION
-            Public routes
+            CUSTOMER AUTH
         ================================================= */}
 
         <Route element={<AuthLayout />}>
@@ -145,21 +150,17 @@ function AppRoutes() {
         </Route>
 
         {/* =================================================
-            ADMIN AUTHENTICATION
-            Completely separate from customer authentication
+            ADMIN AUTH
         ================================================= */}
 
         <Route path="/admin/login" element={<AdminLogin />} />
 
         {/* =================================================
-            CUSTOMER ROUTES
-            Uses MainLayout
+            CUSTOMER
         ================================================= */}
 
         <Route element={<MainLayout />}>
-          {/* =================================================
-              PUBLIC CUSTOMER ROUTES
-          ================================================= */}
+          {/* PUBLIC */}
 
           <Route path="/" element={<Home />} />
 
@@ -173,17 +174,9 @@ function AppRoutes() {
 
           <Route path="/compare" element={<Compare />} />
 
-          {/* =================================================
-              PROTECTED CUSTOMER ROUTES
-
-              Requires:
-              - Customer JWT
-              - Valid customer session
-          ================================================= */}
+          {/* PROTECTED CUSTOMER */}
 
           <Route element={<ProtectedRoute />}>
-            {/* Customer Profile */}
-
             <Route path="/profile" element={<Profile />} />
 
             <Route
@@ -197,42 +190,23 @@ function AppRoutes() {
 
             <Route path="/profile/settings" element={<Settings />} />
 
-            {/* Customer Checkout */}
-
             <Route path="/checkout" element={<Checkout />} />
-
-            {/* Order Success */}
 
             <Route path="/order-success" element={<OrderSuccess />} />
           </Route>
         </Route>
 
         {/* =================================================
-            ADMIN ROUTES
-
-            Requires:
-            - Admin JWT
-            - Admin authentication
-            - Admin role
-
-            Admin routes NEVER use ProtectedRoute.
+            ADMIN
         ================================================= */}
 
         <Route element={<AdminRoute />}>
-          {/* =================================================
-              ADMIN LAYOUT
-          ================================================= */}
-
           <Route element={<AdminLayout />}>
-            {/* =================================================
-                ADMIN DASHBOARD
-            ================================================= */}
+            {/* DASHBOARD */}
 
             <Route path="/admin" element={<AdminDashboard />} />
 
-            {/* =================================================
-                ADMIN ORDERS
-            ================================================= */}
+            {/* ORDERS */}
 
             <Route path="/admin/orders" element={<AdminOrders />} />
 
@@ -242,46 +216,37 @@ function AppRoutes() {
             />
 
             {/* =================================================
-                ADMIN PRODUCTS
+                PRODUCTS
             ================================================= */}
 
             <Route path="/admin/products" element={<AdminProducts />} />
 
-            {/* =================================================
-                ADMIN INVENTORY
-            ================================================= */}
+            <Route path="/admin/products/new" element={<AdminNewProduct />} />
+
+            <Route
+              path="/admin/products/:id"
+              element={<AdminProductDetails />}
+            />
+
+            <Route
+              path="/admin/products/:id/edit"
+              element={<AdminEditProduct />}
+            />
+
+            {/* INVENTORY */}
 
             <Route path="/admin/inventory" element={<AdminInventory />} />
 
-            {/* =================================================
-                ADMIN CUSTOMERS
-            ================================================= */}
+            {/* CUSTOMERS */}
 
             <Route path="/admin/customers" element={<AdminCustomers />} />
 
-            {/* =================================================
-                ADMIN REVIEWS
-            ================================================= */}
+            {/* REVIEWS */}
 
             <Route path="/admin/reviews" element={<AdminReviews />} />
 
             {/* =================================================
-                ADMIN CATEGORIES
-
-                /admin/categories
-                → Read all categories
-
-                /admin/categories/new
-                → Create category
-
-                /admin/categories/:id
-                → View category
-
-                /admin/categories/:id/edit
-                → Update category
-
-                Enable / Disable and Delete
-                are handled from the category UI.
+                CATEGORIES
             ================================================= */}
 
             <Route path="/admin/categories" element={<AdminCategories />} />
@@ -301,39 +266,27 @@ function AppRoutes() {
               element={<AdminEditCategory />}
             />
 
-            {/* =================================================
-                ADMIN COUPONS
-            ================================================= */}
+            {/* COUPONS */}
 
             <Route path="/admin/coupons" element={<AdminCoupons />} />
 
-            {/* =================================================
-                ADMIN BANNERS
-            ================================================= */}
+            {/* BANNERS */}
 
             <Route path="/admin/banners" element={<AdminBanners />} />
 
-            {/* =================================================
-                ADMIN ANALYTICS
-            ================================================= */}
+            {/* ANALYTICS */}
 
             <Route path="/admin/analytics" element={<AdminAnalytics />} />
 
-            {/* =================================================
-                ADMIN REPORTS
-            ================================================= */}
+            {/* REPORTS */}
 
             <Route path="/admin/reports" element={<AdminReports />} />
 
-            {/* =================================================
-                ADMIN SETTINGS
-            ================================================= */}
+            {/* SETTINGS */}
 
             <Route path="/admin/settings" element={<AdminSettings />} />
 
-            {/* =================================================
-                ADMIN PROFILE
-            ================================================= */}
+            {/* PROFILE */}
 
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
