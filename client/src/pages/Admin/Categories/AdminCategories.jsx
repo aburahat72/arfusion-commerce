@@ -4,19 +4,63 @@ import {
   Eye,
   FolderTree,
   Plus,
+  Power,
   Search,
   Trash2,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
 
-import categories from "../../../data/categories";
+import {
+  deleteCategory,
+  getAllCategories,
+  toggleCategoryStatus,
+} from "../../../services/categoryService";
 
 function AdminCategories() {
   const navigate = useNavigate();
 
+  const [categories, setCategories] = useState([]);
+
   const [search, setSearch] = useState("");
+
+  const [loading, setLoading] = useState(true);
+
+  const [error, setError] = useState("");
+
+  const [actionLoading, setActionLoading] = useState("");
+
+  // ===================================================
+  // LOAD CATEGORIES
+  // ===================================================
+
+  const loadCategories = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getAllCategories();
+
+      setCategories(data.categories || []);
+    } catch (error) {
+      console.error("Load categories error:", error);
+
+      setError(error.message || "Failed to load categories");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  // ===================================================
+  // SEARCH
+  // ===================================================
 
   const filteredCategories = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -25,50 +69,114 @@ function AdminCategories() {
       return categories;
     }
 
-    return categories.filter((category) => {
-      const name = category.name || category.label || "";
+    return categories.filter(
+      (category) =>
+        category.name?.toLowerCase().includes(query) ||
+        category.slug?.toLowerCase().includes(query) ||
+        category.description?.toLowerCase().includes(query),
+    );
+  }, [categories, search]);
 
-      const slug = category.slug || category.id || "";
+  // ===================================================
+  // COUNTS
+  // ===================================================
 
-      return (
-        name.toLowerCase().includes(query) ||
-        String(slug).toLowerCase().includes(query)
-      );
-    });
-  }, [search]);
-
-  const activeCount = categories.filter(
-    (category) => category.active !== false,
-  ).length;
+  const activeCount = categories.filter((category) => category.isActive).length;
 
   const inactiveCount = categories.length - activeCount;
+
+  // ===================================================
+  // ADD
+  // ===================================================
 
   const handleAddCategory = () => {
     navigate("/admin/categories/new");
   };
 
-  const handleViewCategory = (category) => {
-    const categoryId =
-      category.id || category._id || category.slug || category.name;
+  // ===================================================
+  // VIEW
+  // ===================================================
 
-    navigate(`/admin/categories/${encodeURIComponent(String(categoryId))}`);
+  const handleViewCategory = (category) => {
+    navigate(`/admin/categories/${category._id}`);
   };
 
-  const handleEditCategory = (category) => {
-    const categoryId =
-      category.id || category._id || category.slug || category.name;
+  // ===================================================
+  // EDIT
+  // ===================================================
 
-    navigate(
-      `/admin/categories/${encodeURIComponent(String(categoryId))}/edit`,
+  const handleEditCategory = (category) => {
+    navigate(`/admin/categories/${category._id}/edit`);
+  };
+
+  // ===================================================
+  // ENABLE / DISABLE
+  // ===================================================
+
+  const handleToggleStatus = async (category) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to ${
+        category.isActive ? "disable" : "enable"
+      } "${category.name}"?`,
     );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(`status-${category._id}`);
+
+      const data = await toggleCategoryStatus(category._id);
+
+      setCategories((current) =>
+        current.map((item) =>
+          item._id === category._id ? data.category : item,
+        ),
+      );
+    } catch (error) {
+      console.error(error);
+
+      window.alert(error.message || "Failed to change category status");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  // ===================================================
+  // DELETE
+  // ===================================================
+
+  const handleDeleteCategory = async (category) => {
+    const confirmed = window.confirm(
+      `Delete "${category.name}" permanently?\n\nThe category image will also be removed from Cloudinary.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(`delete-${category._id}`);
+
+      await deleteCategory(category._id);
+
+      setCategories((current) =>
+        current.filter((item) => item._id !== category._id),
+      );
+    } catch (error) {
+      console.error(error);
+
+      window.alert(error.message || "Failed to delete category");
+    } finally {
+      setActionLoading("");
+    }
   };
 
   return (
     <main className="min-h-[calc(100vh-5rem)] bg-background p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1500px]">
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="mb-6">
           <p className="text-sm text-text-secondary">Catalog</p>
@@ -87,25 +195,7 @@ function AdminCategories() {
             <button
               type="button"
               onClick={handleAddCategory}
-              className="
-                inline-flex
-                h-11
-                items-center
-                justify-center
-                gap-2
-                rounded-xl
-                bg-primary
-                px-4
-                text-sm
-                font-semibold
-                text-white
-                shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:opacity-95
-                hover:shadow-md
-                active:translate-y-0
-              "
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
             >
               <Plus size={18} />
               Add Category
@@ -113,49 +203,38 @@ function AdminCategories() {
           </div>
         </div>
 
-        {/* =================================================
-            SUMMARY
-        ================================================= */}
+        {/* STATISTICS */}
 
         <section className="grid gap-4 sm:grid-cols-3">
-          <CategoryStat
+          <Stat
             title="Total Categories"
             value={categories.length}
             icon={<FolderTree size={20} />}
-            iconClass="bg-primary-container text-primary"
+            className="bg-primary-container text-primary"
           />
 
-          <CategoryStat
+          <Stat
             title="Active Categories"
             value={activeCount}
             icon={<CheckCircle2 size={20} />}
-            iconClass="bg-success/10 text-success"
+            className="bg-success/10 text-success"
           />
 
-          <CategoryStat
+          <Stat
             title="Inactive Categories"
             value={inactiveCount}
             icon={<XCircle size={20} />}
-            iconClass="bg-error/10 text-error"
+            className="bg-error/10 text-error"
           />
         </section>
 
-        {/* =================================================
-            SEARCH
-        ================================================= */}
+        {/* SEARCH */}
 
-        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm sm:p-5">
+        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm">
           <div className="relative">
             <Search
               size={17}
-              className="
-                pointer-events-none
-                absolute
-                left-3.5
-                top-1/2
-                -translate-y-1/2
-                text-text-secondary
-              "
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary"
             />
 
             <input
@@ -163,135 +242,236 @@ function AdminCategories() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search categories..."
-              className="
-                h-11
-                w-full
-                rounded-xl
-                border
-                border-outline-variant
-                bg-surface
-                pl-10
-                pr-4
-                text-sm
-                text-text
-                outline-none
-                transition
-                placeholder:text-text-secondary
-                hover:border-outline
-                focus:border-primary
-                focus:ring-2
-                focus:ring-primary/15
-              "
+              className="h-11 w-full rounded-xl border border-outline-variant bg-surface pl-10 pr-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
           </div>
         </section>
 
-        {/* =================================================
-            RESULT COUNT
-        ================================================= */}
+        {/* ERROR */}
 
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <p className="text-sm text-text-secondary">
-            Showing{" "}
-            <span className="font-semibold text-text">
-              {filteredCategories.length}
-            </span>{" "}
-            categories
-          </p>
+        {error && (
+          <div className="mt-4 rounded-xl border border-error/20 bg-error/5 p-4 text-sm text-error">
+            {error}
 
-          {search && (
             <button
               type="button"
-              onClick={() => setSearch("")}
-              className="text-xs font-semibold text-primary hover:underline"
+              onClick={loadCategories}
+              className="ml-3 font-semibold underline"
             >
-              Clear search
+              Retry
             </button>
-          )}
-        </div>
-
-        {/* =================================================
-            DESKTOP TABLE
-        ================================================= */}
-
-        <section className="mt-4 hidden overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-sm md:block">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] border-collapse">
-              <thead>
-                <tr className="border-b border-outline-variant bg-surface-container/60">
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Category
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Slug / ID
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Products
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Status
-                  </th>
-
-                  <th className="px-5 py-4 text-right text-xs font-semibold text-text-secondary">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredCategories.map((category) => (
-                  <CategoryRow
-                    key={getCategoryKey(category)}
-                    category={category}
-                    onView={handleViewCategory}
-                    onEdit={handleEditCategory}
-                  />
-                ))}
-              </tbody>
-            </table>
           </div>
+        )}
 
-          {filteredCategories.length === 0 && <EmptyCategories />}
-        </section>
+        {/* LOADING */}
 
-        {/* =================================================
-            MOBILE CARDS
-        ================================================= */}
+        {loading ? (
+          <div className="mt-6 rounded-2xl border border-outline-variant bg-surface p-12 text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
 
-        <section className="mt-4 space-y-3 md:hidden">
-          {filteredCategories.map((category) => (
-            <CategoryCard
-              key={getCategoryKey(category)}
-              category={category}
-              onView={handleViewCategory}
-              onEdit={handleEditCategory}
-            />
-          ))}
+            <p className="mt-3 text-sm text-text-secondary">
+              Loading categories...
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* DESKTOP */}
 
-          {filteredCategories.length === 0 && (
-            <div className="rounded-2xl border border-outline-variant bg-surface p-8">
-              <EmptyCategories />
-            </div>
-          )}
-        </section>
+            <section className="mt-6 hidden overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-sm md:block">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px]">
+                  <thead>
+                    <tr className="border-b border-outline-variant bg-surface-container/60">
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                        Category
+                      </th>
+
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                        Slug
+                      </th>
+
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                        Products
+                      </th>
+
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                        Status
+                      </th>
+
+                      <th className="px-5 py-4 text-right text-xs font-semibold text-text-secondary">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {filteredCategories.map((category) => (
+                      <tr
+                        key={category._id}
+                        className="border-b border-outline-variant last:border-0"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <CategoryImage category={category} />
+
+                            <div>
+                              <p className="text-sm font-semibold text-text">
+                                {category.name}
+                              </p>
+
+                              {category.description && (
+                                <p className="mt-1 max-w-md truncate text-xs text-text-secondary">
+                                  {category.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-text-secondary">
+                          {category.slug}
+                        </td>
+
+                        <td className="px-5 py-4 text-sm font-semibold text-text">
+                          {category.productCount ?? 0}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <Status active={category.isActive} />
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end gap-1">
+                            <IconButton
+                              title="View"
+                              onClick={() => handleViewCategory(category)}
+                            >
+                              <Eye size={17} />
+                            </IconButton>
+
+                            <IconButton
+                              title="Edit"
+                              onClick={() => handleEditCategory(category)}
+                            >
+                              <Edit3 size={17} />
+                            </IconButton>
+
+                            <IconButton
+                              title={category.isActive ? "Disable" : "Enable"}
+                              disabled={
+                                actionLoading === `status-${category._id}`
+                              }
+                              onClick={() => handleToggleStatus(category)}
+                            >
+                              <Power size={17} />
+                            </IconButton>
+
+                            <IconButton
+                              title="Delete"
+                              danger
+                              disabled={
+                                actionLoading === `delete-${category._id}`
+                              }
+                              onClick={() => handleDeleteCategory(category)}
+                            >
+                              <Trash2 size={17} />
+                            </IconButton>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredCategories.length === 0 && <Empty />}
+            </section>
+
+            {/* MOBILE */}
+
+            <section className="mt-6 space-y-3 md:hidden">
+              {filteredCategories.map((category) => (
+                <article
+                  key={category._id}
+                  className="rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm"
+                >
+                  <div className="flex gap-3">
+                    <CategoryImage category={category} />
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="truncate text-sm font-semibold text-text">
+                            {category.name}
+                          </p>
+
+                          <p className="mt-1 text-xs text-text-secondary">
+                            {category.slug}
+                          </p>
+                        </div>
+
+                        <Status active={category.isActive} />
+                      </div>
+
+                      <div className="mt-3 text-xs text-text-secondary">
+                        Products:{" "}
+                        <span className="font-semibold text-text">
+                          {category.productCount ?? 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    <MobileButton onClick={() => handleViewCategory(category)}>
+                      <Eye size={15} />
+                      View
+                    </MobileButton>
+
+                    <MobileButton onClick={() => handleEditCategory(category)}>
+                      <Edit3 size={15} />
+                      Edit
+                    </MobileButton>
+
+                    <MobileButton
+                      disabled={actionLoading === `status-${category._id}`}
+                      onClick={() => handleToggleStatus(category)}
+                    >
+                      <Power size={15} />
+                      {category.isActive ? "Off" : "On"}
+                    </MobileButton>
+
+                    <MobileButton
+                      danger
+                      disabled={actionLoading === `delete-${category._id}`}
+                      onClick={() => handleDeleteCategory(category)}
+                    >
+                      <Trash2 size={15} />
+                      Delete
+                    </MobileButton>
+                  </div>
+                </article>
+              ))}
+
+              {filteredCategories.length === 0 && <Empty />}
+            </section>
+          </>
+        )}
       </div>
     </main>
   );
 }
 
-/* =========================================================
-   STAT CARD
-========================================================= */
+// =====================================================
+// COMPONENTS
+// =====================================================
 
-function CategoryStat({ title, value, icon, iconClass }) {
+function Stat({ title, value, icon, className }) {
   return (
     <article className="rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${className}`}
         >
           {icon}
         </div>
@@ -306,112 +486,17 @@ function CategoryStat({ title, value, icon, iconClass }) {
   );
 }
 
-/* =========================================================
-   DESKTOP ROW
-========================================================= */
-
-function CategoryRow({ category, onView, onEdit }) {
-  const name = category.name || category.label || "Unnamed Category";
-
-  const identifier = category.slug || category.id || category._id || "—";
-
-  const productCount = Number(
-    category.productCount ?? category.productsCount ?? category.count ?? 0,
-  );
-
-  const isActive = category.active !== false;
-
-  return (
-    <tr className="border-b border-outline-variant last:border-0">
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-3">
-          <CategoryIcon />
-
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">{name}</p>
-
-            {category.description && (
-              <p className="mt-0.5 max-w-md truncate text-xs text-text-secondary">
-                {category.description}
-              </p>
-            )}
-          </div>
-        </div>
-      </td>
-
-      <td className="px-5 py-4 text-sm text-text-secondary">{identifier}</td>
-
-      <td className="px-5 py-4 text-sm font-semibold text-text">
-        {productCount}
-      </td>
-
-      <td className="px-5 py-4">
-        <CategoryStatus active={isActive} />
-      </td>
-
-      <td className="px-5 py-4">
-        <CategoryActions category={category} onView={onView} onEdit={onEdit} />
-      </td>
-    </tr>
-  );
-}
-
-/* =========================================================
-   MOBILE CARD
-========================================================= */
-
-function CategoryCard({ category, onView, onEdit }) {
-  const name = category.name || category.label || "Unnamed Category";
-
-  const identifier = category.slug || category.id || category._id || "—";
-
-  const productCount = Number(
-    category.productCount ?? category.productsCount ?? category.count ?? 0,
-  );
-
-  const isActive = category.active !== false;
-
-  return (
-    <article className="rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <CategoryIcon />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-text">{name}</p>
-
-              <p className="mt-1 truncate text-xs text-text-secondary">
-                {identifier}
-              </p>
-            </div>
-
-            <CategoryStatus active={isActive} />
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <InfoItem label="Products" value={productCount} />
-
-            <InfoItem label="Status" value={isActive ? "Active" : "Inactive"} />
-          </div>
-        </div>
-      </div>
-
-      <CategoryActions
-        category={category}
-        onView={onView}
-        onEdit={onEdit}
-        mobile
+function CategoryImage({ category }) {
+  if (category.image?.url) {
+    return (
+      <img
+        src={category.image.url}
+        alt={category.name}
+        className="h-11 w-11 shrink-0 rounded-xl object-cover"
       />
-    </article>
-  );
-}
+    );
+  }
 
-/* =========================================================
-   CATEGORY ICON
-========================================================= */
-
-function CategoryIcon() {
   return (
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-container text-primary">
       <FolderTree size={20} />
@@ -419,190 +504,70 @@ function CategoryIcon() {
   );
 }
 
-/* =========================================================
-   ACTIONS
-========================================================= */
-
-function CategoryActions({ category, onView, onEdit, mobile = false }) {
-  if (mobile) {
-    return (
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => onView(category)}
-          className="
-            inline-flex
-            h-10
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            border
-            border-outline-variant
-            text-xs
-            font-semibold
-            text-text
-            transition
-            hover:bg-surface-container
-          "
-        >
-          <Eye size={15} />
-          View
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onEdit(category)}
-          className="
-            inline-flex
-            h-10
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            bg-primary
-            text-xs
-            font-semibold
-            text-white
-            transition
-            hover:opacity-90
-          "
-        >
-          <Edit3 size={15} />
-          Edit
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex justify-end gap-1">
-      <button
-        type="button"
-        onClick={() => onView(category)}
-        aria-label="View category"
-        className="
-          inline-flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-lg
-          text-text-secondary
-          transition
-          hover:bg-surface-container
-          hover:text-primary
-        "
-      >
-        <Eye size={17} />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => onEdit(category)}
-        aria-label="Edit category"
-        className="
-          inline-flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-lg
-          text-text-secondary
-          transition
-          hover:bg-surface-container
-          hover:text-primary
-        "
-      >
-        <Edit3 size={17} />
-      </button>
-
-      <button
-        type="button"
-        aria-label="Delete category"
-        className="
-          inline-flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-lg
-          text-text-secondary
-          transition
-          hover:bg-error/5
-          hover:text-error
-        "
-      >
-        <Trash2 size={17} />
-      </button>
-    </div>
-  );
-}
-
-/* =========================================================
-   STATUS
-========================================================= */
-
-function CategoryStatus({ active }) {
-  if (!active) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2.5 py-1.5 text-[10px] font-semibold text-error">
-        <XCircle size={12} />
-        Inactive
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success">
+function Status({ active }) {
+  return active ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success">
       <CheckCircle2 size={12} />
       Active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2.5 py-1.5 text-[10px] font-semibold text-error">
+      <XCircle size={12} />
+      Inactive
     </span>
   );
 }
 
-/* =========================================================
-   INFO ITEM
-========================================================= */
-
-function InfoItem({ label, value }) {
+function IconButton({ children, title, onClick, disabled, danger }) {
   return (
-    <div className="rounded-xl bg-surface-container p-3">
-      <p className="text-[10px] text-text-secondary">{label}</p>
-
-      <p className="mt-1 truncate text-xs font-semibold text-text">{value}</p>
-    </div>
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg transition disabled:opacity-40 ${
+        danger
+          ? "text-text-secondary hover:bg-error/10 hover:text-error"
+          : "text-text-secondary hover:bg-surface-container hover:text-primary"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
-/* =========================================================
-   EMPTY STATE
-========================================================= */
-
-function EmptyCategories() {
+function MobileButton({ children, onClick, disabled, danger }) {
   return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container">
-        <FolderTree size={21} className="text-text-secondary" />
-      </div>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-10 items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold disabled:opacity-40 ${
+        danger
+          ? "border-error/20 text-error"
+          : "border-outline-variant text-text"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
-      <h2 className="mt-3 text-sm font-semibold text-text">
+function Empty() {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <FolderTree size={24} className="text-text-secondary" />
+
+      <p className="mt-3 text-sm font-semibold text-text">
         No categories found
-      </h2>
+      </p>
 
-      <p className="mt-1 max-w-xs text-xs leading-5 text-text-secondary">
-        Try changing your search or add a new category.
+      <p className="mt-1 text-xs text-text-secondary">
+        Try a different search.
       </p>
     </div>
   );
-}
-
-/* =========================================================
-   KEY
-========================================================= */
-
-function getCategoryKey(category) {
-  return String(category.id || category._id || category.slug || category.name);
 }
 
 export default AdminCategories;

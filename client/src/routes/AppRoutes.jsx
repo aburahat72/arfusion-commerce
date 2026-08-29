@@ -56,7 +56,16 @@ import AdminProducts from "../pages/Admin/Products/AdminProducts";
 import AdminInventory from "../pages/Admin/Inventory/AdminInventory";
 import AdminCustomers from "../pages/Admin/Customers/AdminCustomers";
 import AdminReviews from "../pages/Admin/Reviews/AdminReviews";
+
+// =====================================================
+// ADMIN CATEGORIES
+// =====================================================
+
 import AdminCategories from "../pages/Admin/Categories/AdminCategories";
+import AdminNewCategory from "../pages/Admin/Categories/AdminNewCategory";
+import AdminEditCategory from "../pages/Admin/Categories/AdminEditCategory";
+import AdminCategoryDetails from "../pages/Admin/Categories/AdminCategoryDetails";
+
 import AdminCoupons from "../pages/Admin/Coupons/AdminCoupons";
 import AdminBanners from "../pages/Admin/Banners/AdminBanners";
 import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
@@ -258,9 +267,39 @@ function AppRoutes() {
 
             {/* =================================================
                 ADMIN CATEGORIES
+
+                /admin/categories
+                → Read all categories
+
+                /admin/categories/new
+                → Create category
+
+                /admin/categories/:id
+                → View category
+
+                /admin/categories/:id/edit
+                → Update category
+
+                Enable / Disable and Delete
+                are handled from the category UI.
             ================================================= */}
 
             <Route path="/admin/categories" element={<AdminCategories />} />
+
+            <Route
+              path="/admin/categories/new"
+              element={<AdminNewCategory />}
+            />
+
+            <Route
+              path="/admin/categories/:id"
+              element={<AdminCategoryDetails />}
+            />
+
+            <Route
+              path="/admin/categories/:id/edit"
+              element={<AdminEditCategory />}
+            />
 
             {/* =================================================
                 ADMIN COUPONS

@@ -15,6 +15,8 @@ import { apiLimiter } from "./src/middleware/rateLimit.middleware.js";
 import customerAuthRoutes from "./src/routes/customerAuth.routes.js";
 import adminAuthRoutes from "./src/routes/adminAuth.routes.js";
 import productRoutes from "./src/routes/product.routes.js";
+import categoryRoutes from "./src/routes/category.routes.js";
+
 import cartRoutes from "./src/routes/cart.routes.js";
 import orderRoutes from "./src/routes/order.routes.js";
 import paymentRoutes from "./src/routes/payment.routes.js";
@@ -30,10 +32,16 @@ import notificationRoutes from "./src/routes/notification.routes.js";
 
 const app = express();
 
+// =====================================================
 // Security middleware
+// =====================================================
+
 app.use(helmet());
 
+// =====================================================
 // CORS
+// =====================================================
+
 // CORS configuration
 // Allows the frontend application to communicate with this backend.
 // The allowed frontend URL is stored in the environment variables.
@@ -52,43 +60,94 @@ app.use(
   }),
 );
 
+// =====================================================
 // Body parsers
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// =====================================================
 
+app.use(express.json({ limit: "10mb" }));
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb",
+  }),
+);
+
+// =====================================================
 // Response compression
-// Compresses API responses to reduce response size and improve network performance.
+// =====================================================
+
+// Compresses API responses to reduce response size
+// and improve network performance.
 app.use(compression());
 
+// =====================================================
 // HTTP request logging
+// =====================================================
+
 app.use(morgan("dev"));
 
+// =====================================================
 // Global API rate limiter
+// =====================================================
+
 app.use("/api", apiLimiter);
 
+// =====================================================
 // Routes
+// =====================================================
+
 app.use("/api/auth/customer", customerAuthRoutes);
+
 app.use("/api/auth/admin", adminAuthRoutes);
+
 app.use("/api/products", productRoutes);
+
+// =====================================================
+// CATEGORY ROUTES
+// =====================================================
+
+app.use("/api/categories", categoryRoutes);
+
 app.use("/api/cart", cartRoutes);
+
 app.use("/api/wishlist", wishlistRoutes);
+
 app.use("/api/addresses", addressRoutes);
+
 app.use("/api/orders", orderRoutes);
+
 app.use("/api/payments", paymentRoutes);
+
 app.use("/api/reviews", reviewRoutes);
+
 app.use("/api/coupons", couponRoutes);
+
 app.use("/api/returns", returnRoutes);
+
 app.use("/api/inventory", inventoryRoutes);
+
 app.use("/api/notifications", notificationRoutes);
 
-// admin dashboard routes
+// =====================================================
+// Admin dashboard routes
+// =====================================================
+
 app.use("/api/dashboard", dashboardRoutes);
+
 app.use("/api/analytics", analyticsRoutes);
 
+// =====================================================
 // Home Route
+// =====================================================
+
 app.get("/", (req, res) => {
   res.send("Welcome to ARFusion Commerce API");
 });
+
+// =====================================================
+// Server
+// =====================================================
 
 const PORT = process.env.PORT || 3000;
 
