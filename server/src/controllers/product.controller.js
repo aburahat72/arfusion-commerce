@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-
 import cloudinary from "../config/cloudinary.js";
 
 import Product from "../models/product.model.js";
@@ -16,9 +15,7 @@ const isValidObjectId = (id) => {
 };
 
 const deleteCloudinaryImages = async (images = []) => {
-  if (!images.length) {
-    return;
-  }
+  if (!images.length) return;
 
   await Promise.allSettled(
     images
@@ -28,9 +25,7 @@ const deleteCloudinaryImages = async (images = []) => {
 };
 
 const uploadProductImages = async (files = []) => {
-  if (!files.length) {
-    return [];
-  }
+  if (!files.length) return [];
 
   const uploadedImages = [];
 
@@ -61,6 +56,10 @@ const getActiveCategory = async (categoryId) => {
     _id: categoryId,
     isActive: true,
   });
+};
+
+const populateCategory = (query) => {
+  return query.populate("category", "name slug image isActive");
 };
 
 // =====================================================
@@ -120,13 +119,14 @@ export const getAllProducts = async (req, res) => {
     const skip = (currentPage - 1) * itemsPerPage;
 
     const [products, total] = await Promise.all([
-      Product.find(filter)
-        .populate("category", "name slug image isActive")
-        .sort({
-          createdAt: -1,
-        })
-        .skip(skip)
-        .limit(itemsPerPage),
+      populateCategory(
+        Product.find(filter)
+          .sort({
+            createdAt: -1,
+          })
+          .skip(skip)
+          .limit(itemsPerPage),
+      ),
 
       Product.countDocuments(filter),
     ]);
@@ -204,13 +204,14 @@ export const getAllAdminProducts = async (req, res) => {
     const skip = (currentPage - 1) * itemsPerPage;
 
     const [products, total] = await Promise.all([
-      Product.find(filter)
-        .populate("category", "name slug image isActive")
-        .sort({
-          createdAt: -1,
-        })
-        .skip(skip)
-        .limit(itemsPerPage),
+      populateCategory(
+        Product.find(filter)
+          .sort({
+            createdAt: -1,
+          })
+          .skip(skip)
+          .limit(itemsPerPage),
+      ),
 
       Product.countDocuments(filter),
     ]);
@@ -249,10 +250,12 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findOne({
-      _id: id,
-      isActive: true,
-    }).populate("category", "name slug image isActive");
+    const product = await populateCategory(
+      Product.findOne({
+        _id: id,
+        isActive: true,
+      }),
+    );
 
     if (!product) {
       return res.status(404).json({
@@ -278,7 +281,6 @@ export const getProductById = async (req, res) => {
 // =====================================================
 // GET SINGLE PRODUCT
 // ADMIN
-// Includes inactive products
 // =====================================================
 
 export const getAdminProductById = async (req, res) => {
@@ -292,10 +294,7 @@ export const getAdminProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(id).populate(
-      "category",
-      "name slug image isActive",
-    );
+    const product = await populateCategory(Product.findById(id));
 
     if (!product) {
       return res.status(404).json({
@@ -594,6 +593,10 @@ export const toggleProductStatus = async (req, res) => {
     });
   }
 };
+
+// =====================================================
+// EXPORT
+// =====================================================
 
 export default {
   createProduct,

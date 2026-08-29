@@ -33,8 +33,6 @@ const router = express.Router();
 
 router.get("/", getAllProducts);
 
-router.get("/:id", getProductById);
-
 // =====================================================
 // ADMIN
 // =====================================================
@@ -63,6 +61,13 @@ router.post(
 );
 
 router.patch(
+  "/:id/status",
+  protectedRoute,
+  authorize("admin"),
+  toggleProductStatus,
+);
+
+router.patch(
   "/:id",
   protectedRoute,
   authorize("admin"),
@@ -71,13 +76,12 @@ router.patch(
   updateProduct,
 );
 
-router.patch(
-  "/:id/status",
-  protectedRoute,
-  authorize("admin"),
-  toggleProductStatus,
-);
-
 router.delete("/:id", protectedRoute, authorize("admin"), deleteProduct);
+
+// =====================================================
+// PUBLIC SINGLE PRODUCT
+// =====================================================
+
+router.get("/:id", getProductById);
 
 export default router;

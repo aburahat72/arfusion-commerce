@@ -5,21 +5,12 @@ const categoryIdSchema = z
   .trim()
   .regex(/^[0-9a-fA-F]{24}$/, "Valid category is required");
 
-const booleanSchema = z.preprocess(
-  (value) => {
-    if (value === "true") {
-      return true;
-    }
+const booleanSchema = z.preprocess((value) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
 
-    if (value === "false") {
-      return false;
-    }
-
-    return value;
-  },
-
-  z.boolean().optional(),
-);
+  return value;
+}, z.boolean().optional());
 
 // =====================================================
 // CREATE
