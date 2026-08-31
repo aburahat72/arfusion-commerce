@@ -50,6 +50,7 @@ import AdminLogin from "../pages/Auth/AdminLogin";
 // =====================================================
 
 import AdminDashboard from "../pages/Admin/Dashboard/AdminDashboard";
+
 import AdminOrders from "../pages/Admin/Orders/AdminOrders";
 import AdminOrderDetails from "../pages/Admin/Orders/AdminOrderDetails";
 
@@ -72,11 +73,19 @@ import AdminEditCategory from "../pages/Admin/Categories/AdminEditCategory";
 import AdminCategoryDetails from "../pages/Admin/Categories/AdminCategoryDetails";
 
 // =====================================================
+// ADMIN BANNERS
+// =====================================================
+
+import AdminBanners from "../pages/Admin/Banners/AdminBanners";
+import AdminNewBanner from "../pages/Admin/Banners/AdminNewBanner";
+import AdminBannerPreview from "../pages/Admin/Banners/AdminBannerPreview";
+import AdminBannerEdit from "../pages/Admin/Banners/AdminBannerEdit";
+
+// =====================================================
 // OTHER ADMIN PAGES
 // =====================================================
 
 import AdminCoupons from "../pages/Admin/Coupons/AdminCoupons";
-import AdminBanners from "../pages/Admin/Banners/AdminBanners";
 import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
 import AdminReports from "../pages/Admin/Reports/AdminReports";
 import AdminSettings from "../pages/Admin/Settings/AdminSettings";
@@ -202,11 +211,15 @@ function AppRoutes() {
 
         <Route element={<AdminRoute />}>
           <Route element={<AdminLayout />}>
-            {/* DASHBOARD */}
+            {/* =================================================
+                DASHBOARD
+            ================================================= */}
 
             <Route path="/admin" element={<AdminDashboard />} />
 
-            {/* ORDERS */}
+            {/* =================================================
+                ORDERS
+            ================================================= */}
 
             <Route path="/admin/orders" element={<AdminOrders />} />
 
@@ -233,15 +246,21 @@ function AppRoutes() {
               element={<AdminEditProduct />}
             />
 
-            {/* INVENTORY */}
+            {/* =================================================
+                INVENTORY
+            ================================================= */}
 
             <Route path="/admin/inventory" element={<AdminInventory />} />
 
-            {/* CUSTOMERS */}
+            {/* =================================================
+                CUSTOMERS
+            ================================================= */}
 
             <Route path="/admin/customers" element={<AdminCustomers />} />
 
-            {/* REVIEWS */}
+            {/* =================================================
+                REVIEWS
+            ================================================= */}
 
             <Route path="/admin/reviews" element={<AdminReviews />} />
 
@@ -266,27 +285,48 @@ function AppRoutes() {
               element={<AdminEditCategory />}
             />
 
-            {/* COUPONS */}
+            {/* =================================================
+                COUPONS
+            ================================================= */}
 
             <Route path="/admin/coupons" element={<AdminCoupons />} />
 
-            {/* BANNERS */}
+            {/* =================================================
+                BANNERS
+            ================================================= */}
 
             <Route path="/admin/banners" element={<AdminBanners />} />
 
-            {/* ANALYTICS */}
+            <Route path="/admin/banners/new" element={<AdminNewBanner />} />
+
+            <Route path="/admin/banners/:id" element={<AdminBannerPreview />} />
+
+            <Route
+              path="/admin/banners/:id/edit"
+              element={<AdminBannerEdit />}
+            />
+
+            {/* =================================================
+                ANALYTICS
+            ================================================= */}
 
             <Route path="/admin/analytics" element={<AdminAnalytics />} />
 
-            {/* REPORTS */}
+            {/* =================================================
+                REPORTS
+            ================================================= */}
 
             <Route path="/admin/reports" element={<AdminReports />} />
 
-            {/* SETTINGS */}
+            {/* =================================================
+                SETTINGS
+            ================================================= */}
 
             <Route path="/admin/settings" element={<AdminSettings />} />
 
-            {/* PROFILE */}
+            {/* =================================================
+                PROFILE
+            ================================================= */}
 
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>

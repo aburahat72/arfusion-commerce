@@ -16,6 +16,7 @@ import customerAuthRoutes from "./src/routes/customerAuth.routes.js";
 import adminAuthRoutes from "./src/routes/adminAuth.routes.js";
 import productRoutes from "./src/routes/product.routes.js";
 import categoryRoutes from "./src/routes/category.routes.js";
+import bannerRoutes from "./src/routes/banner.routes.js";
 
 import cartRoutes from "./src/routes/cart.routes.js";
 import orderRoutes from "./src/routes/order.routes.js";
@@ -102,6 +103,8 @@ app.use("/api/auth/customer", customerAuthRoutes);
 app.use("/api/auth/admin", adminAuthRoutes);
 
 app.use("/api/products", productRoutes);
+
+app.use("/api/banners", bannerRoutes);
 
 // =====================================================
 // CATEGORY ROUTES
