@@ -1,106 +1,229 @@
-import { Ban, CheckCircle2, Eye, Search, UserPlus, Users } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-const customers = [
-  {
-    id: "CUS-1001",
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+91 98765 43210",
-    orders: 12,
-    spent: 18450,
-    status: "Active",
-    joined: "24 Aug 2026",
-    avatar: null,
-  },
-  {
-    id: "CUS-1002",
-    name: "Emily Johnson",
-    email: "emily@example.com",
-    phone: "+91 98765 12345",
-    orders: 8,
-    spent: 12990,
-    status: "Active",
-    joined: "22 Aug 2026",
-    avatar: null,
-  },
-  {
-    id: "CUS-1003",
-    name: "Michael Smith",
-    email: "michael@example.com",
-    phone: "+91 91234 56789",
-    orders: 5,
-    spent: 7890,
-    status: "Active",
-    joined: "18 Aug 2026",
-    avatar: null,
-  },
-  {
-    id: "CUS-1004",
-    name: "Sarah Williams",
-    email: "sarah@example.com",
-    phone: "+91 99887 66554",
-    orders: 15,
-    spent: 24600,
-    status: "Active",
-    joined: "14 Aug 2026",
-    avatar: null,
-  },
-  {
-    id: "CUS-1005",
-    name: "David Brown",
-    email: "david@example.com",
-    phone: "+91 90123 45678",
-    orders: 2,
-    spent: 1999,
-    status: "Blocked",
-    joined: "10 Aug 2026",
-    avatar: null,
-  },
-];
+import {
+  Ban,
+  CheckCircle2,
+  Eye,
+  Loader2,
+  Pencil,
+  Search,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  deleteCustomer,
+  getCustomers,
+  updateCustomer,
+  updateCustomerStatus,
+} from "../../../services/adminApi.js";
 
 function AdminCustomers() {
-  const navigate = useNavigate();
+  const [customers, setCustomers] = useState([]);
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All");
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  const [editingCustomer, setEditingCustomer] = useState(null);
+
+  const [deletingCustomer, setDeletingCustomer] = useState(null);
+
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // =====================================================
+  // GET CUSTOMERS
+  // =====================================================
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await getCustomers();
+
+      const apiCustomers = response.data?.customers || [];
+
+      setCustomers(apiCustomers);
+    } catch (error) {
+      console.error("Failed to fetch customers:", error);
+
+      setError(error.response?.data?.message || "Failed to load customers.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  // =====================================================
+  // FILTER CUSTOMERS
+  // =====================================================
 
   const filteredCustomers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     return customers.filter((customer) => {
+      const name = customer.fullName?.toLowerCase() || "";
+
+      const email = customer.email?.toLowerCase() || "";
+
+      const phone = customer.phone?.toLowerCase() || "";
+
+      const id = customer._id?.toLowerCase() || "";
+
       const matchesSearch =
         !query ||
-        customer.name.toLowerCase().includes(query) ||
-        customer.email.toLowerCase().includes(query) ||
-        customer.id.toLowerCase().includes(query) ||
-        customer.phone.toLowerCase().includes(query);
+        name.includes(query) ||
+        email.includes(query) ||
+        phone.includes(query) ||
+        id.includes(query);
 
-      const matchesStatus = status === "All" || customer.status === status;
+      const customerStatus = customer.isActive ? "Active" : "Blocked";
+
+      const matchesStatus = status === "All" || customerStatus === status;
 
       return matchesSearch && matchesStatus;
     });
-  }, [search, status]);
+  }, [customers, search, status]);
+
+  // =====================================================
+  // SUMMARY
+  // =====================================================
 
   const totalCustomers = customers.length;
 
   const activeCustomers = customers.filter(
-    (customer) => customer.status === "Active",
+    (customer) => customer.isActive,
   ).length;
 
   const blockedCustomers = customers.filter(
-    (customer) => customer.status === "Blocked",
+    (customer) => !customer.isActive,
   ).length;
 
-  const totalRevenue = customers.reduce(
-    (total, customer) => total + customer.spent,
-    0,
-  );
+  // Orders/revenue will be connected to Order collection later.
+  const totalOrders = 0;
+  const totalRevenue = 0;
 
-  const handleViewCustomer = (customer) => {
-    navigate(`/admin/customers/${customer.id}`);
+  // =====================================================
+  // STATUS TOGGLE
+  // =====================================================
+
+  const handleToggleStatus = async (customer) => {
+    try {
+      setActionLoading(true);
+      setError("");
+
+      const newStatus = !customer.isActive;
+
+      const response = await updateCustomerStatus(customer._id, newStatus);
+
+      const updatedCustomer = response.data?.customer;
+
+      if (updatedCustomer) {
+        setCustomers((currentCustomers) =>
+          currentCustomers.map((item) =>
+            item._id === updatedCustomer._id ? updatedCustomer : item,
+          ),
+        );
+      }
+    } catch (error) {
+      console.error("Failed to update customer status:", error);
+
+      setError(
+        error.response?.data?.message || "Failed to update customer status.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
+
+  // =====================================================
+  // UPDATE CUSTOMER
+  // =====================================================
+
+  const handleUpdateCustomer = async (customerId, formData) => {
+    try {
+      setActionLoading(true);
+      setError("");
+
+      const response = await updateCustomer(customerId, formData);
+
+      const updatedCustomer = response.data?.customer;
+
+      if (updatedCustomer) {
+        setCustomers((currentCustomers) =>
+          currentCustomers.map((item) =>
+            item._id === updatedCustomer._id ? updatedCustomer : item,
+          ),
+        );
+
+        setSelectedCustomer(updatedCustomer);
+
+        setEditingCustomer(null);
+      }
+    } catch (error) {
+      console.error("Failed to update customer:", error);
+
+      setError(error.response?.data?.message || "Failed to update customer.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // =====================================================
+  // DELETE CUSTOMER
+  // =====================================================
+
+  const handleDeleteCustomer = async (customer) => {
+    try {
+      setActionLoading(true);
+      setError("");
+
+      await deleteCustomer(customer._id);
+
+      setCustomers((currentCustomers) =>
+        currentCustomers.filter((item) => item._id !== customer._id),
+      );
+
+      setDeletingCustomer(null);
+      setSelectedCustomer(null);
+    } catch (error) {
+      console.error("Failed to delete customer:", error);
+
+      setError(error.response?.data?.message || "Failed to delete customer.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // =====================================================
+  // DATE FORMAT
+  // =====================================================
+
+  const formatDate = (date) => {
+    if (!date) return "—";
+
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(date));
+  };
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <main className="min-h-[calc(100vh-5rem)] bg-background p-4 sm:p-6 lg:p-8">
@@ -125,9 +248,12 @@ function AdminCustomers() {
 
             <button
               type="button"
+              disabled
+              title="Admin customer creation API will be added next"
               className="
                 inline-flex
                 h-11
+                cursor-not-allowed
                 items-center
                 justify-center
                 gap-2
@@ -137,11 +263,8 @@ function AdminCustomers() {
                 text-sm
                 font-semibold
                 text-white
+                opacity-60
                 shadow-sm
-                transition
-                hover:-translate-y-0.5
-                hover:opacity-95
-                hover:shadow-md
               "
             >
               <UserPlus size={18} />
@@ -149,6 +272,31 @@ function AdminCustomers() {
             </button>
           </div>
         </div>
+
+        {/* =================================================
+            ERROR
+        ================================================= */}
+
+        {error && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-error/20 bg-error/10 p-4 text-sm text-error">
+            <Ban size={18} className="mt-0.5 shrink-0" />
+
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Something went wrong</p>
+
+              <p className="mt-1">{error}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="shrink-0"
+              aria-label="Close error"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        )}
 
         {/* =================================================
             SUMMARY
@@ -237,18 +385,18 @@ function AdminCustomers() {
                   type="button"
                   onClick={() => setStatus(option)}
                   className={`
-                      h-11
-                      rounded-xl
-                      px-4
-                      text-xs
-                      font-semibold
-                      transition
-                      ${
-                        status === option
-                          ? "bg-primary text-white"
-                          : "border border-outline-variant text-text-secondary hover:bg-surface-container hover:text-text"
-                      }
-                    `}
+                    h-11
+                    rounded-xl
+                    px-4
+                    text-xs
+                    font-semibold
+                    transition
+                    ${
+                      status === option
+                        ? "bg-primary text-white"
+                        : "border border-outline-variant text-text-secondary hover:bg-surface-container hover:text-text"
+                    }
+                  `}
                 >
                   {option}
                 </button>
@@ -261,7 +409,7 @@ function AdminCustomers() {
             RESULTS
         ================================================= */}
 
-        <div className="mt-5">
+        <div className="mt-5 flex items-center justify-between">
           <p className="text-sm text-text-secondary">
             Showing{" "}
             <span className="font-semibold text-text">
@@ -269,6 +417,24 @@ function AdminCustomers() {
             </span>{" "}
             customers
           </p>
+
+          <button
+            type="button"
+            onClick={fetchCustomers}
+            disabled={loading}
+            className="
+              inline-flex
+              items-center
+              gap-2
+              text-xs
+              font-semibold
+              text-primary
+              disabled:opacity-50
+            "
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Refresh
+          </button>
         </div>
 
         {/* =================================================
@@ -276,49 +442,57 @@ function AdminCustomers() {
         ================================================= */}
 
         <section className="mt-4 hidden overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-sm md:block">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] border-collapse">
-              <thead>
-                <tr className="border-b border-outline-variant bg-surface-container/60">
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Customer
-                  </th>
+          {loading ? (
+            <LoadingCustomers />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] border-collapse">
+                <thead>
+                  <tr className="border-b border-outline-variant bg-surface-container/60">
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                      Customer
+                    </th>
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Contact
-                  </th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                      Contact
+                    </th>
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Orders
-                  </th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                      Orders
+                    </th>
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Total Spent
-                  </th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                      Total Spent
+                    </th>
 
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Status
-                  </th>
+                    <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
+                      Status
+                    </th>
 
-                  <th className="px-5 py-4 text-right text-xs font-semibold text-text-secondary">
-                    Action
-                  </th>
-                </tr>
-              </thead>
+                    <th className="px-5 py-4 text-right text-xs font-semibold text-text-secondary">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                {filteredCustomers.map((customer) => (
-                  <CustomerRow
-                    key={customer.id}
-                    customer={customer}
-                    onView={handleViewCustomer}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+                <tbody>
+                  {filteredCustomers.map((customer) => (
+                    <CustomerRow
+                      key={customer._id}
+                      customer={customer}
+                      onView={() => setSelectedCustomer(customer)}
+                      onEdit={() => setEditingCustomer(customer)}
+                      onToggleStatus={() => handleToggleStatus(customer)}
+                      onDelete={() => setDeletingCustomer(customer)}
+                      actionLoading={actionLoading}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {filteredCustomers.length === 0 && <EmptyCustomers />}
+          {!loading && filteredCustomers.length === 0 && <EmptyCustomers />}
         </section>
 
         {/* =================================================
@@ -326,28 +500,83 @@ function AdminCustomers() {
         ================================================= */}
 
         <section className="mt-4 space-y-3 md:hidden">
-          {filteredCustomers.map((customer) => (
-            <CustomerCard
-              key={customer.id}
-              customer={customer}
-              onView={handleViewCustomer}
-            />
-          ))}
+          {loading ? (
+            <LoadingCustomers />
+          ) : (
+            <>
+              {filteredCustomers.map((customer) => (
+                <CustomerCard
+                  key={customer._id}
+                  customer={customer}
+                  onView={() => setSelectedCustomer(customer)}
+                  onEdit={() => setEditingCustomer(customer)}
+                  onToggleStatus={() => handleToggleStatus(customer)}
+                  onDelete={() => setDeletingCustomer(customer)}
+                  actionLoading={actionLoading}
+                />
+              ))}
 
-          {filteredCustomers.length === 0 && (
-            <div className="rounded-2xl border border-outline-variant bg-surface p-8">
-              <EmptyCustomers />
-            </div>
+              {filteredCustomers.length === 0 && (
+                <div className="rounded-2xl border border-outline-variant bg-surface p-8">
+                  <EmptyCustomers />
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
+
+      {/* =================================================
+          VIEW CUSTOMER
+      ================================================= */}
+
+      {selectedCustomer && (
+        <CustomerViewModal
+          customer={selectedCustomer}
+          onClose={() => setSelectedCustomer(null)}
+          onEdit={() => {
+            setEditingCustomer(selectedCustomer);
+            setSelectedCustomer(null);
+          }}
+          onToggleStatus={() => handleToggleStatus(selectedCustomer)}
+          onDelete={() => setDeletingCustomer(selectedCustomer)}
+          actionLoading={actionLoading}
+          formatDate={formatDate}
+        />
+      )}
+
+      {/* =================================================
+          EDIT CUSTOMER
+      ================================================= */}
+
+      {editingCustomer && (
+        <EditCustomerModal
+          customer={editingCustomer}
+          onClose={() => setEditingCustomer(null)}
+          onSubmit={handleUpdateCustomer}
+          loading={actionLoading}
+        />
+      )}
+
+      {/* =================================================
+          DELETE CONFIRMATION
+      ================================================= */}
+
+      {deletingCustomer && (
+        <DeleteCustomerModal
+          customer={deletingCustomer}
+          onClose={() => setDeletingCustomer(null)}
+          onConfirm={() => handleDeleteCustomer(deletingCustomer)}
+          loading={actionLoading}
+        />
+      )}
     </main>
   );
 }
 
-/* =========================================================
-   STAT
-========================================================= */
+// =========================================================
+// STAT
+// =========================================================
 
 function CustomerStat({ title, value, icon, iconClass }) {
   return (
@@ -371,23 +600,30 @@ function CustomerStat({ title, value, icon, iconClass }) {
   );
 }
 
-/* =========================================================
-   DESKTOP ROW
-========================================================= */
+// =========================================================
+// DESKTOP ROW
+// =========================================================
 
-function CustomerRow({ customer, onView }) {
+function CustomerRow({
+  customer,
+  onView,
+  onEdit,
+  onToggleStatus,
+  onDelete,
+  actionLoading,
+}) {
   return (
     <tr className="border-b border-outline-variant last:border-0">
       <td className="px-5 py-4">
         <div className="flex items-center gap-3">
-          <Avatar name={customer.name} />
+          <Avatar name={customer.fullName} avatar={customer.avatar} />
 
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-text">
-              {customer.name}
+              {customer.fullName || "Unnamed Customer"}
             </p>
 
-            <p className="mt-0.5 text-xs text-text-secondary">{customer.id}</p>
+            <p className="mt-0.5 text-xs text-text-secondary">{customer._id}</p>
           </div>
         </div>
       </td>
@@ -395,126 +631,686 @@ function CustomerRow({ customer, onView }) {
       <td className="px-5 py-4">
         <p className="text-sm text-text">{customer.email}</p>
 
-        <p className="mt-1 text-xs text-text-secondary">{customer.phone}</p>
+        <p className="mt-1 text-xs text-text-secondary">
+          {customer.phone || "No phone"}
+        </p>
       </td>
 
-      <td className="px-5 py-4 text-sm font-semibold text-text">
-        {customer.orders}
-      </td>
+      <td className="px-5 py-4 text-sm font-semibold text-text">0</td>
 
       <td className="px-5 py-4 text-sm font-semibold text-text">
-        {formatCurrency(customer.spent)}
+        {formatCurrency(0)}
       </td>
 
       <td className="px-5 py-4">
-        <CustomerStatus status={customer.status} />
+        <CustomerStatus isActive={customer.isActive} />
       </td>
 
-      <td className="px-5 py-4 text-right">
-        <button
-          type="button"
-          onClick={() => onView(customer)}
-          className="
-            inline-flex
-            h-9
-            w-9
-            items-center
-            justify-center
-            rounded-lg
-            text-text-secondary
-            transition
-            hover:bg-surface-container
-            hover:text-primary
-          "
-          aria-label={`View ${customer.name}`}
-        >
-          <Eye size={17} />
-        </button>
+      <td className="px-5 py-4">
+        <div className="flex justify-end gap-1">
+          <ActionButton
+            icon={<Eye size={16} />}
+            label="View"
+            onClick={onView}
+          />
+
+          <ActionButton
+            icon={<Pencil size={16} />}
+            label="Edit"
+            onClick={onEdit}
+          />
+
+          <ActionButton
+            icon={
+              customer.isActive ? <Ban size={16} /> : <CheckCircle2 size={16} />
+            }
+            label={customer.isActive ? "Block" : "Activate"}
+            onClick={onToggleStatus}
+            disabled={actionLoading}
+          />
+
+          <ActionButton
+            icon={<Trash2 size={16} />}
+            label="Delete"
+            onClick={onDelete}
+            disabled={actionLoading}
+            danger
+          />
+        </div>
       </td>
     </tr>
   );
 }
 
-/* =========================================================
-   MOBILE CARD
-========================================================= */
+// =========================================================
+// MOBILE CARD
+// =========================================================
 
-function CustomerCard({ customer, onView }) {
+function CustomerCard({
+  customer,
+  onView,
+  onEdit,
+  onToggleStatus,
+  onDelete,
+  actionLoading,
+}) {
   return (
     <article className="rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <Avatar name={customer.name} />
+        <Avatar name={customer.fullName} avatar={customer.avatar} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-text">
-                {customer.name}
+                {customer.fullName || "Unnamed Customer"}
               </p>
 
-              <p className="mt-1 text-xs text-text-secondary">{customer.id}</p>
+              <p className="mt-1 truncate text-xs text-text-secondary">
+                {customer._id}
+              </p>
             </div>
 
-            <CustomerStatus status={customer.status} />
+            <CustomerStatus isActive={customer.isActive} />
           </div>
 
           <div className="mt-4 space-y-1.5 text-xs">
             <p className="truncate text-text-secondary">{customer.email}</p>
 
-            <p className="text-text-secondary">{customer.phone}</p>
+            <p className="text-text-secondary">
+              {customer.phone || "No phone"}
+            </p>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <InfoItem label="Orders" value={customer.orders} />
+            <InfoItem label="Orders" value="0" />
 
-            <InfoItem
-              label="Total Spent"
-              value={formatCurrency(customer.spent)}
-            />
+            <InfoItem label="Total Spent" value={formatCurrency(0)} />
           </div>
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => onView(customer)}
-        className="
-          mt-4
-          flex
-          h-10
-          w-full
-          items-center
-          justify-center
-          gap-2
-          rounded-xl
-          border
-          border-outline-variant
-          text-xs
-          font-semibold
-          text-text
-          transition
-          hover:bg-surface-container
-          hover:text-primary
-        "
-      >
-        <Eye size={15} />
-        View Customer
-      </button>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onView}
+          className="
+            flex
+            h-10
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-outline-variant
+            text-xs
+            font-semibold
+            text-text
+            transition
+            hover:bg-surface-container
+            hover:text-primary
+          "
+        >
+          <Eye size={15} />
+          View
+        </button>
+
+        <button
+          type="button"
+          onClick={onEdit}
+          className="
+            flex
+            h-10
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-outline-variant
+            text-xs
+            font-semibold
+            text-text
+            transition
+            hover:bg-surface-container
+            hover:text-primary
+          "
+        >
+          <Pencil size={15} />
+          Edit
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleStatus}
+          disabled={actionLoading}
+          className="
+            flex
+            h-10
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-outline-variant
+            text-xs
+            font-semibold
+            text-text
+            transition
+            hover:bg-surface-container
+            hover:text-primary
+            disabled:opacity-50
+          "
+        >
+          {customer.isActive ? <Ban size={15} /> : <CheckCircle2 size={15} />}
+
+          {customer.isActive ? "Block" : "Activate"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={actionLoading}
+          className="
+            flex
+            h-10
+            items-center
+            justify-center
+            gap-2
+            rounded-xl
+            border
+            border-error/20
+            text-xs
+            font-semibold
+            text-error
+            transition
+            hover:bg-error/10
+            disabled:opacity-50
+          "
+        >
+          <Trash2 size={15} />
+          Delete
+        </button>
+      </div>
     </article>
   );
 }
 
-/* =========================================================
-   AVATAR
-========================================================= */
+// =========================================================
+// ACTION BUTTON
+// =========================================================
 
-function Avatar({ name }) {
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function ActionButton({
+  icon,
+  label,
+  onClick,
+  disabled = false,
+  danger = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`
+        inline-flex
+        h-9
+        w-9
+        items-center
+        justify-center
+        rounded-lg
+        transition
+        disabled:cursor-not-allowed
+        disabled:opacity-40
+        ${
+          danger
+            ? "text-error hover:bg-error/10"
+            : "text-text-secondary hover:bg-surface-container hover:text-primary"
+        }
+      `}
+    >
+      {icon}
+    </button>
+  );
+}
+
+// =========================================================
+// VIEW MODAL
+// =========================================================
+
+function CustomerViewModal({
+  customer,
+  onClose,
+  onEdit,
+  onToggleStatus,
+  onDelete,
+  actionLoading,
+  formatDate,
+}) {
+  return (
+    <Modal onClose={onClose}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Avatar name={customer.fullName} avatar={customer.avatar} />
+
+          <div>
+            <h2 className="text-lg font-semibold text-text">
+              {customer.fullName}
+            </h2>
+
+            <p className="text-xs text-text-secondary">{customer._id}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-text-secondary hover:text-text"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <DetailItem label="Full Name" value={customer.fullName} />
+
+        <DetailItem label="Email" value={customer.email} />
+
+        <DetailItem label="Phone" value={customer.phone || "Not provided"} />
+
+        <DetailItem label="Role" value={customer.role} />
+
+        <DetailItem
+          label="Status"
+          value={customer.isActive ? "Active" : "Blocked"}
+        />
+
+        <DetailItem
+          label="Verified"
+          value={customer.isVerified ? "Verified" : "Not verified"}
+        />
+
+        <DetailItem label="Joined" value={formatDate(customer.createdAt)} />
+
+        <DetailItem
+          label="Last Updated"
+          value={formatDate(customer.updatedAt)}
+        />
+      </div>
+
+      <div className="mt-6 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="
+            inline-flex
+            h-10
+            items-center
+            gap-2
+            rounded-xl
+            border
+            border-outline-variant
+            px-4
+            text-xs
+            font-semibold
+            text-text
+            hover:bg-surface-container
+          "
+        >
+          <Pencil size={15} />
+          Edit
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleStatus}
+          disabled={actionLoading}
+          className="
+            inline-flex
+            h-10
+            items-center
+            gap-2
+            rounded-xl
+            border
+            border-outline-variant
+            px-4
+            text-xs
+            font-semibold
+            text-text
+            hover:bg-surface-container
+            disabled:opacity-50
+          "
+        >
+          {customer.isActive ? <Ban size={15} /> : <CheckCircle2 size={15} />}
+
+          {customer.isActive ? "Block Customer" : "Activate Customer"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={actionLoading}
+          className="
+            inline-flex
+            h-10
+            items-center
+            gap-2
+            rounded-xl
+            border
+            border-error/20
+            px-4
+            text-xs
+            font-semibold
+            text-error
+            hover:bg-error/10
+            disabled:opacity-50
+          "
+        >
+          <Trash2 size={15} />
+          Delete
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// =========================================================
+// EDIT MODAL
+// =========================================================
+
+function EditCustomerModal({ customer, onClose, onSubmit, loading }) {
+  const [fullName, setFullName] = useState(customer.fullName || "");
+
+  const [email, setEmail] = useState(customer.email || "");
+
+  const [phone, setPhone] = useState(customer.phone || "");
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    onSubmit(customer._id, {
+      fullName: fullName.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+    });
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-text">Edit Customer</h2>
+
+          <p className="mt-1 text-xs text-text-secondary">
+            Update customer account information.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-text-secondary hover:text-text"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <FormField
+          label="Full Name"
+          value={fullName}
+          onChange={setFullName}
+          required
+        />
+
+        <FormField
+          label="Email"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          required
+        />
+
+        <FormField label="Phone" value={phone} onChange={setPhone} />
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="
+              h-10
+              rounded-xl
+              border
+              border-outline-variant
+              px-4
+              text-xs
+              font-semibold
+              text-text
+              hover:bg-surface-container
+              disabled:opacity-50
+            "
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="
+              inline-flex
+              h-10
+              items-center
+              gap-2
+              rounded-xl
+              bg-primary
+              px-4
+              text-xs
+              font-semibold
+              text-white
+              hover:opacity-95
+              disabled:opacity-50
+            "
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// =========================================================
+// DELETE MODAL
+// =========================================================
+
+function DeleteCustomerModal({ customer, onClose, onConfirm, loading }) {
+  return (
+    <Modal onClose={onClose}>
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-error/10 text-error">
+          <Trash2 size={20} />
+        </div>
+
+        <div>
+          <h2 className="text-lg font-semibold text-text">Delete Customer?</h2>
+
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            This will permanently delete{" "}
+            <span className="font-semibold text-text">{customer.fullName}</span>{" "}
+            and their user account.
+          </p>
+
+          <p className="mt-2 text-xs text-error">
+            This action cannot be undone.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={loading}
+          className="
+            h-10
+            rounded-xl
+            border
+            border-outline-variant
+            px-4
+            text-xs
+            font-semibold
+            text-text
+            hover:bg-surface-container
+            disabled:opacity-50
+          "
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={loading}
+          className="
+            inline-flex
+            h-10
+            items-center
+            gap-2
+            rounded-xl
+            bg-error
+            px-4
+            text-xs
+            font-semibold
+            text-white
+            hover:opacity-90
+            disabled:opacity-50
+          "
+        >
+          {loading && <Loader2 size={14} className="animate-spin" />}
+          Delete Customer
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// =========================================================
+// MODAL
+// =========================================================
+
+function Modal({ children, onClose }) {
+  return (
+    <div
+      className="
+        fixed
+        inset-0
+        z-50
+        flex
+        items-center
+        justify-center
+        bg-black/40
+        p-4
+        backdrop-blur-sm
+      "
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-outline-variant bg-surface p-5 shadow-xl sm:p-6">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// FORM FIELD
+// =========================================================
+
+function FormField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-text">
+        {label}
+        {required && <span className="ml-1 text-error">*</span>}
+      </span>
+
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        className="
+          h-11
+          w-full
+          rounded-xl
+          border
+          border-outline-variant
+          bg-surface
+          px-3.5
+          text-sm
+          text-text
+          outline-none
+          transition
+          placeholder:text-text-secondary
+          focus:border-primary
+          focus:ring-2
+          focus:ring-primary/15
+        "
+      />
+    </label>
+  );
+}
+
+// =========================================================
+// DETAIL ITEM
+// =========================================================
+
+function DetailItem({ label, value }) {
+  return (
+    <div className="rounded-xl bg-surface-container p-3">
+      <p className="text-[10px] text-text-secondary">{label}</p>
+
+      <p className="mt-1 break-words text-xs font-semibold text-text">
+        {value || "—"}
+      </p>
+    </div>
+  );
+}
+
+// =========================================================
+// AVATAR
+// =========================================================
+
+function Avatar({ name, avatar }) {
+  const initials =
+    name
+      ?.split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "CU";
+
+  if (avatar) {
+    return (
+      <img
+        src={avatar}
+        alt={name || "Customer"}
+        className="h-11 w-11 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
 
   return (
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-container text-xs font-semibold text-primary">
@@ -523,12 +1319,12 @@ function Avatar({ name }) {
   );
 }
 
-/* =========================================================
-   STATUS
-========================================================= */
+// =========================================================
+// STATUS
+// =========================================================
 
-function CustomerStatus({ status }) {
-  if (status === "Blocked") {
+function CustomerStatus({ isActive }) {
+  if (!isActive) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2.5 py-1.5 text-[10px] font-semibold text-error">
         <Ban size={12} />
@@ -545,9 +1341,9 @@ function CustomerStatus({ status }) {
   );
 }
 
-/* =========================================================
-   INFO
-========================================================= */
+// =========================================================
+// INFO
+// =========================================================
 
 function InfoItem({ label, value }) {
   return (
@@ -559,9 +1355,25 @@ function InfoItem({ label, value }) {
   );
 }
 
-/* =========================================================
-   EMPTY
-========================================================= */
+// =========================================================
+// LOADING
+// =========================================================
+
+function LoadingCustomers() {
+  return (
+    <div className="flex min-h-[300px] items-center justify-center">
+      <div className="flex flex-col items-center gap-3 text-text-secondary">
+        <Loader2 size={28} className="animate-spin text-primary" />
+
+        <p className="text-sm">Loading customers...</p>
+      </div>
+    </div>
+  );
+}
+
+// =========================================================
+// EMPTY
+// =========================================================
 
 function EmptyCustomers() {
   return (
@@ -581,9 +1393,9 @@ function EmptyCustomers() {
   );
 }
 
-/* =========================================================
-   CURRENCY
-========================================================= */
+// =========================================================
+// CURRENCY
+// =========================================================
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-IN", {

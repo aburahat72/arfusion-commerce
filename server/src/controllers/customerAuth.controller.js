@@ -5,7 +5,7 @@ import { sendWelcomeEmail } from "../services/email.services.js";
 // Handle customer registration
 export const registerUser = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, email, phone, password } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -19,16 +19,18 @@ export const registerUser = async (req, res) => {
 
     // Create new customer
     // IMPORTANT:
-    // Role is explicitly controlled by the server.
+    // Role is always controlled by the server.
     // The client cannot register as admin.
     const user = await User.create({
       fullName,
       email,
+      phone,
       password,
       role: "customer",
     });
 
-    // Send welcome email (don't fail registration if email fails)
+    // Send welcome email
+    // Registration should succeed even if email sending fails.
     try {
       await sendWelcomeEmail(user.email, user.fullName);
     } catch (error) {
@@ -42,7 +44,11 @@ export const registerUser = async (req, res) => {
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        isVerified: user.isVerified,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {
@@ -62,9 +68,8 @@ export const loginUser = async (req, res) => {
 
     // Find customer only
     //
-    // The role condition is important:
-    // An admin account cannot log in through the
-    // customer authentication endpoint.
+    // An admin cannot log in through
+    // the customer authentication endpoint.
     const user = await User.findOne({
       email,
       role: "customer",
@@ -78,6 +83,7 @@ export const loginUser = async (req, res) => {
     }
 
     // Check whether account is active
+    // Admin can control this from the admin panel.
     if (!user.isActive) {
       return res.status(403).json({
         success: false,
@@ -97,9 +103,8 @@ export const loginUser = async (req, res) => {
 
     // Generate CUSTOMER JWT
     //
-    // IMPORTANT:
-    // Customer authentication uses a completely
-    // separate secret from admin authentication.
+    // Customer authentication uses a separate
+    // secret from admin authentication.
     const token = jwt.sign(
       {
         userID: user._id,
@@ -110,9 +115,6 @@ export const loginUser = async (req, res) => {
       },
     );
 
-    // Temporary development logging
-    console.log("CUSTOMER JWT:", token);
-
     return res.status(200).json({
       success: true,
       message: "Login successful",
@@ -121,7 +123,10 @@ export const loginUser = async (req, res) => {
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        isVerified: user.isVerified,
+        isActive: user.isActive,
       },
     });
   } catch (error) {

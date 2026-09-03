@@ -60,4 +60,39 @@ adminApi.interceptors.response.use(
   },
 );
 
+// =====================================================
+// CUSTOMER MANAGEMENT API
+// =====================================================
+
+// Get all customers
+export const getCustomers = () => {
+  return adminApi.get("/admin/customers");
+};
+
+// Get single customer
+export const getCustomerById = (id) => {
+  return adminApi.get(`/admin/customers/${id}`);
+};
+
+// Activate / Block customer
+export const updateCustomerStatus = (id, isActive) => {
+  return adminApi.patch(`/admin/customers/${id}/status`, {
+    isActive,
+  });
+};
+
+// Update customer
+export const updateCustomer = (id, data) => {
+  return adminApi.patch(`/admin/customers/${id}`, data);
+};
+
+// Delete customer
+export const deleteCustomer = (id) => {
+  return adminApi.delete(`/admin/customers/${id}`);
+};
+
+// =====================================================
+// DEFAULT EXPORT
+// =====================================================
+
 export default adminApi;

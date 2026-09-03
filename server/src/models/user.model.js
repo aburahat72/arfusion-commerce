@@ -6,6 +6,7 @@ const SALT_ROUNDS = 12;
 
 const userSchema = new mongoose.Schema(
   {
+    // Customer/Admin name
     fullName: {
       type: String,
       required: [true, "Full name is required"],
@@ -14,6 +15,7 @@ const userSchema = new mongoose.Schema(
       maxlength: [50, "Full name cannot exceed 50 characters"],
     },
 
+    // Email address
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -23,6 +25,15 @@ const userSchema = new mongoose.Schema(
       validate: [validator.isEmail, "Please provide a valid email"],
     },
 
+    // Phone number
+    phone: {
+      type: String,
+      trim: true,
+      maxlength: [20, "Phone number cannot exceed 20 characters"],
+      default: null,
+    },
+
+    // Password
     password: {
       type: String,
       required: [true, "Password is required"],
@@ -30,22 +41,28 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    // User role
+    // IMPORTANT:
+    // Customer registration must always create "customer".
     role: {
       type: String,
       enum: ["customer", "admin"],
       default: "customer",
     },
 
+    // Profile avatar
     avatar: {
       type: String,
       default: null,
     },
 
+    // Email/account verification
     isVerified: {
       type: Boolean,
       default: false,
     },
 
+    // Admin can activate/deactivate customer accounts
     isActive: {
       type: Boolean,
       default: true,
@@ -57,7 +74,7 @@ const userSchema = new mongoose.Schema(
 );
 
 // Indexes
-// userSchema.index({ email: 1 });
+// email already has a unique index because of unique: true.
 
 // Hash password before saving
 userSchema.pre("save", async function () {

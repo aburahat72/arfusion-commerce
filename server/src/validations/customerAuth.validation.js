@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 // Register Schema validation
-
 export const registerSchema = z.object({
   fullName: z
     .string()
@@ -11,6 +10,12 @@ export const registerSchema = z.object({
 
   email: z.string().trim().email("Please provide a valid email").toLowerCase(),
 
+  phone: z
+    .string()
+    .trim()
+    .min(10, "Phone number must be at least 10 characters")
+    .max(20, "Phone number cannot exceed 20 characters"),
+
   password: z
     .string()
     .min(6, "Password must be at least 6 characters")
@@ -18,7 +23,6 @@ export const registerSchema = z.object({
 });
 
 // Login schema validation
-
 export const loginSchema = z.object({
   email: z.string().trim().email("Please provide a valid email").toLowerCase(),
 

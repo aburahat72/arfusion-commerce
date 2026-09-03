@@ -14,6 +14,8 @@ import { apiLimiter } from "./src/middleware/rateLimit.middleware.js";
 
 import customerAuthRoutes from "./src/routes/customerAuth.routes.js";
 import adminAuthRoutes from "./src/routes/adminAuth.routes.js";
+import adminCustomerRoutes from "./src/routes/adminCustomer.routes.js";
+
 import productRoutes from "./src/routes/product.routes.js";
 import categoryRoutes from "./src/routes/category.routes.js";
 import bannerRoutes from "./src/routes/banner.routes.js";
@@ -101,6 +103,8 @@ app.use("/api", apiLimiter);
 app.use("/api/auth/customer", customerAuthRoutes);
 
 app.use("/api/auth/admin", adminAuthRoutes);
+
+app.use("/api/admin/customers", adminCustomerRoutes);
 
 app.use("/api/products", productRoutes);
 

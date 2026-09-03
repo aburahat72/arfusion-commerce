@@ -16,6 +16,7 @@ function Register() {
   const navigate = useNavigate();
 
   const [showPassword, setShowPassword] = useState(false);
+
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -63,7 +64,9 @@ function Register() {
     const newErrors = {};
 
     const trimmedName = formData.fullName.trim();
+
     const trimmedEmail = formData.email.trim();
+
     const trimmedPhone = formData.phone.trim();
 
     if (!trimmedName) {
@@ -121,13 +124,19 @@ function Register() {
       setErrors({});
       setSuccessMessage("");
 
+      // IMPORTANT:
+      // Phone is now included in the backend payload.
       const registrationData = {
         fullName: formData.fullName.trim(),
+
         email: formData.email.trim().toLowerCase(),
+
+        phone: formData.phone.trim(),
+
         password: formData.password,
       };
 
-      console.log("Sending customer registration request...");
+      console.log("Sending customer registration request:", registrationData);
 
       const response = await customerApi.post(
         "/auth/customer/register",
@@ -159,7 +168,7 @@ function Register() {
         confirmPassword: "",
       });
 
-      // Redirect immediately after successful registration.
+      // Redirect after successful registration.
       navigate("/login", {
         replace: true,
         state: {
@@ -173,7 +182,7 @@ function Register() {
 
       if (error.response?.status === 400) {
         setErrors({
-          general: backendMessage || "This email may already be registered.",
+          general: backendMessage || "Please check your registration details.",
         });
       } else if (error.response?.status === 429) {
         setErrors({
