@@ -27,6 +27,17 @@ export const getActiveCategories = async () => {
 };
 
 // =====================================================
+// GET CATEGORY BY SLUG
+// PUBLIC
+// =====================================================
+
+export const getCategoryBySlug = async (slug) => {
+  const response = await adminApi.get(`/categories/${slug}`);
+
+  return response.data;
+};
+
+// =====================================================
 // CREATE CATEGORY
 // ADMIN
 // multipart/form-data
