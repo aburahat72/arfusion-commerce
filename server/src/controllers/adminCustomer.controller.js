@@ -104,7 +104,7 @@ export const updateCustomerStatus = async (req, res) => {
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       },
     ).select("-password");
@@ -126,6 +126,20 @@ export const updateCustomerStatus = async (req, res) => {
   } catch (error) {
     console.error("Update Customer Status Error:", error);
 
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Customer information already exists",
+      });
+    }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -143,12 +157,20 @@ export const updateCustomer = async (req, res) => {
     const { id } = req.params;
     const { fullName, email, phone, avatar } = req.body;
 
+    // =================================================
+    // VALIDATE CUSTOMER ID
+    // =================================================
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid customer ID",
       });
     }
+
+    // =================================================
+    // FIND CUSTOMER
+    // =================================================
 
     const customer = await User.findOne({
       _id: id,
@@ -162,35 +184,49 @@ export const updateCustomer = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------
-    // Update only fields that were actually supplied
-    // ---------------------------------------------
+    // =================================================
+    // UPDATE FULL NAME
+    // =================================================
 
     if (fullName !== undefined) {
       customer.fullName = fullName;
     }
 
+    // =================================================
+    // UPDATE PHONE
+    // =================================================
+
     if (phone !== undefined) {
       customer.phone = phone;
     }
+
+    // =================================================
+    // UPDATE AVATAR
+    // =================================================
 
     if (avatar !== undefined) {
       customer.avatar = avatar;
     }
 
-    // ---------------------------------------------
-    // Email update
-    // ---------------------------------------------
+    // =================================================
+    // UPDATE EMAIL
+    // =================================================
 
     if (email !== undefined) {
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = String(email).trim().toLowerCase();
+
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email cannot be empty",
+        });
+      }
 
       const existingUser = await User.findOne({
         email: normalizedEmail,
-        _id: { $ne: id },
-      });
+      }).select("_id role");
 
-      if (existingUser) {
+      if (existingUser && existingUser._id.toString() !== id.toString()) {
         return res.status(409).json({
           success: false,
           message: "Email is already being used by another account",
@@ -200,17 +236,28 @@ export const updateCustomer = async (req, res) => {
       customer.email = normalizedEmail;
     }
 
+    // =================================================
+    // SAVE CUSTOMER
+    // =================================================
+
     await customer.save();
+
+    // =================================================
+    // RETURN UPDATED CUSTOMER
+    // =================================================
+
+    const updatedCustomer = await User.findById(customer._id).select(
+      "-password",
+    );
 
     return res.status(200).json({
       success: true,
       message: "Customer updated successfully",
-      customer: customer.toJSON(),
+      customer: updatedCustomer,
     });
   } catch (error) {
     console.error("Update Customer Error:", error);
 
-    // MongoDB duplicate email protection
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
@@ -218,11 +265,17 @@ export const updateCustomer = async (req, res) => {
       });
     }
 
-    // Mongoose validation errors
     if (error.name === "ValidationError") {
       return res.status(400).json({
         success: false,
         message: error.message,
+      });
+    }
+
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid value for ${error.path}`,
       });
     }
 

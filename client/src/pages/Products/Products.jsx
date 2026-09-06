@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
@@ -8,7 +8,8 @@ import Button from "../../components/ui/Button";
 import ProductFilters from "../../components/product/ProductFilters";
 import ProductGrid from "../../components/product/ProductGrid";
 
-import products from "../../data/products";
+import { getAllProducts } from "../../services/productService";
+import { getActiveCategories } from "../../services/categoryService";
 
 function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -22,6 +23,21 @@ function Products() {
   const sort = searchParams.get("sort") || "";
 
   /* =====================================================
+     PRODUCTS
+  ===================================================== */
+
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  /* =====================================================
+     CATEGORIES
+  ===================================================== */
+
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  /* =====================================================
      PRICE FILTER STATE
   ===================================================== */
 
@@ -33,6 +49,99 @@ function Products() {
   ===================================================== */
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  /* =====================================================
+     FETCH ACTIVE CATEGORIES
+  ===================================================== */
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true);
+
+        const response = await getActiveCategories();
+
+        if (!isMounted) return;
+
+        if (response?.success) {
+          setCategories(response.categories || []);
+        } else {
+          setCategories([]);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+
+        console.error("Categories fetch error:", error);
+        setCategories([]);
+      } finally {
+        if (isMounted) {
+          setCategoriesLoading(false);
+        }
+      }
+    };
+
+    fetchCategories();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  /* =====================================================
+     FETCH REAL PRODUCTS
+  ===================================================== */
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await getAllProducts({
+          search: search.trim() || undefined,
+          category: category || undefined,
+          minPrice: minPrice !== "" ? minPrice : undefined,
+          maxPrice: maxPrice !== "" ? maxPrice : undefined,
+          page: 1,
+          limit: 100,
+        });
+
+        if (!isMounted) return;
+
+        if (response?.success) {
+          setProducts(response.products || []);
+        } else {
+          setProducts([]);
+          setError(response?.message || "Unable to load products");
+        }
+      } catch (err) {
+        if (!isMounted) return;
+
+        console.error("Products fetch error:", err);
+
+        setProducts([]);
+
+        setError(
+          err?.response?.data?.message ||
+            "Unable to load products. Please try again.",
+        );
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [search, category, minPrice, maxPrice]);
 
   /* =====================================================
      CATEGORY
@@ -95,171 +204,68 @@ function Products() {
   };
 
   /* =====================================================
-     FILTER PRODUCTS
+     SORT REAL PRODUCTS
   ===================================================== */
 
-  const filteredProducts = useMemo(() => {
-    let result = [...products];
+  const sortedProducts = [...products];
 
-    /* -------------------------------------------------
-       SEARCH
-    ------------------------------------------------- */
+  switch (sort) {
+    case "featured":
+      sortedProducts.sort((a, b) => {
+        const ratingDifference = Number(b.rating || 0) - Number(a.rating || 0);
 
-    if (search.trim()) {
-      const query = search.toLowerCase().trim();
+        if (ratingDifference !== 0) {
+          return ratingDifference;
+        }
 
-      result = result.filter((product) => {
-        const name = product.name?.toLowerCase() || "";
-
-        const productCategory = product.category?.toLowerCase() || "";
-
-        const categoryLabel = product.categoryLabel?.toLowerCase() || "";
-
-        const brand = product.brand?.toLowerCase() || "";
-
-        const sku = product.sku?.toLowerCase() || "";
-
-        const description = product.description?.toLowerCase() || "";
-
-        return (
-          name.includes(query) ||
-          productCategory.includes(query) ||
-          categoryLabel.includes(query) ||
-          brand.includes(query) ||
-          sku.includes(query) ||
-          description.includes(query)
-        );
+        return Number(b.reviewCount || 0) - Number(a.reviewCount || 0);
       });
-    }
 
-    /* -------------------------------------------------
-       CATEGORY
-    ------------------------------------------------- */
+      break;
 
-    if (category) {
-      result = result.filter(
-        (product) => product.category?.toLowerCase() === category.toLowerCase(),
+    case "price-low":
+      sortedProducts.sort(
+        (a, b) => Number(a.price || 0) - Number(b.price || 0),
       );
-    }
 
-    /* -------------------------------------------------
-       MINIMUM PRICE
-    ------------------------------------------------- */
+      break;
 
-    if (minPrice !== "") {
-      result = result.filter(
-        (product) => Number(product.price) >= Number(minPrice),
+    case "price-high":
+      sortedProducts.sort(
+        (a, b) => Number(b.price || 0) - Number(a.price || 0),
       );
-    }
 
-    /* -------------------------------------------------
-       MAXIMUM PRICE
-    ------------------------------------------------- */
+      break;
 
-    if (maxPrice !== "") {
-      result = result.filter(
-        (product) => Number(product.price) <= Number(maxPrice),
+    case "rating":
+      sortedProducts.sort(
+        (a, b) => Number(b.rating || 0) - Number(a.rating || 0),
       );
-    }
 
-    /* =================================================
-       SORTING
-    ================================================= */
+      break;
 
-    switch (sort) {
-      /* ------------------------------------------------
-         FEATURED
-      ------------------------------------------------ */
+    case "deals":
+      sortedProducts.sort((a, b) => {
+        const discountA = Number(a.discount || 0);
+        const discountB = Number(b.discount || 0);
 
-      case "featured":
-        result.sort((a, b) => {
-          const ratingDifference =
-            Number(b.rating || 0) - Number(a.rating || 0);
+        return discountB - discountA;
+      });
 
-          if (ratingDifference !== 0) {
-            return ratingDifference;
-          }
+      break;
 
-          return Number(b.reviewCount || 0) - Number(a.reviewCount || 0);
-        });
+    case "newest":
+      sortedProducts.sort(
+        (a, b) =>
+          new Date(b.createdAt || 0).getTime() -
+          new Date(a.createdAt || 0).getTime(),
+      );
 
-        break;
+      break;
 
-      /* ------------------------------------------------
-         PRICE LOW → HIGH
-      ------------------------------------------------ */
-
-      case "price-low":
-        result.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
-
-        break;
-
-      /* ------------------------------------------------
-         PRICE HIGH → LOW
-      ------------------------------------------------ */
-
-      case "price-high":
-        result.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-
-        break;
-
-      /* ------------------------------------------------
-         RATING
-      ------------------------------------------------ */
-
-      case "rating":
-        result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
-
-        break;
-
-      /* ------------------------------------------------
-         DEALS
-      ------------------------------------------------ */
-
-      case "deals":
-        result = result.filter((product) => product.discount);
-
-        result.sort((a, b) => {
-          const discountA =
-            Number(
-              String(a.discount || "")
-                .replace("%", "")
-                .replace("-", ""),
-            ) || 0;
-
-          const discountB =
-            Number(
-              String(b.discount || "")
-                .replace("%", "")
-                .replace("-", ""),
-            ) || 0;
-
-          return discountB - discountA;
-        });
-
-        break;
-
-      /* ------------------------------------------------
-         NEWEST
-      ------------------------------------------------ */
-
-      case "newest":
-        /*
-         * Current static products.js does not contain
-         * createdAt, so the original product order
-         * is preserved.
-         *
-         * Later, when products come from MongoDB,
-         * sort using createdAt.
-         */
-        break;
-
-      default:
-        break;
-    }
-
-    return result;
-  }, [search, category, sort, minPrice, maxPrice]);
+    default:
+      break;
+  }
 
   /* =====================================================
      CLEAR ALL FILTERS
@@ -270,6 +276,21 @@ function Products() {
     setMaxPrice("");
     setSearchParams({});
   };
+
+  /* =====================================================
+     DISPLAY CATEGORY
+  ===================================================== */
+
+  const categoryFromList = categories.find(
+    (item) =>
+      item.slug === category || item._id === category || item.id === category,
+  );
+
+  const categoryName =
+    categoryFromList?.name ||
+    (products.length > 0 && products[0]?.category?.name
+      ? products[0].category.name
+      : category);
 
   return (
     <main className="min-h-screen bg-background py-8 sm:py-10">
@@ -290,7 +311,7 @@ function Products() {
               <span className="mx-2">/</span>
 
               <span className="font-medium capitalize text-primary">
-                {category}
+                {categoryName || category}
               </span>
             </>
           )}
@@ -315,7 +336,8 @@ function Products() {
             {search
               ? `Search results for "${search}"`
               : category
-                ? `${category.charAt(0).toUpperCase()}${category.slice(1)}`
+                ? categoryName ||
+                  `${category.charAt(0).toUpperCase()}${category.slice(1)}`
                 : "Products"}
           </h1>
 
@@ -323,7 +345,7 @@ function Products() {
             {search
               ? `Showing products matching "${search}".`
               : category
-                ? `Discover our ${category} products.`
+                ? `Discover our ${categoryName || category} products.`
                 : "Discover products you'll love."}
           </p>
         </div>
@@ -334,8 +356,6 @@ function Products() {
 
         <div className="mb-6 max-w-2xl">
           <div className="relative">
-            {/* Search icon */}
-
             <Search
               size={19}
               aria-hidden="true"
@@ -350,8 +370,6 @@ function Products() {
               "
             />
 
-            {/* Search input */}
-
             <Input
               name="productSearch"
               type="text"
@@ -360,8 +378,6 @@ function Products() {
               placeholder="Search products..."
               className="pl-11 pr-11"
             />
-
-            {/* Clear search */}
 
             {search && (
               <button
@@ -425,6 +441,8 @@ function Products() {
               maxPrice={maxPrice}
               setMaxPrice={setMaxPrice}
               onClear={clearFilters}
+              categories={categories}
+              categoriesLoading={categoriesLoading}
             />
           </aside>
 
@@ -433,15 +451,13 @@ function Products() {
           ================================================= */}
 
           <section>
-            {/* Results header */}
-
             <div className="mb-5 flex items-center justify-between gap-4">
               <p className="text-sm text-text-secondary">
                 Showing{" "}
                 <span className="font-semibold text-text">
-                  {filteredProducts.length}
+                  {loading ? "..." : sortedProducts.length}
                 </span>{" "}
-                {filteredProducts.length === 1 ? "product" : "products"}
+                {sortedProducts.length === 1 ? "product" : "products"}
               </p>
 
               <div className="hidden sm:block">
@@ -451,9 +467,34 @@ function Products() {
               </div>
             </div>
 
-            {/* Product grid */}
+            {loading && (
+              <div className="rounded-2xl border border-outline-variant bg-surface p-10 text-center">
+                <p className="text-sm text-text-secondary">
+                  Loading products...
+                </p>
+              </div>
+            )}
 
-            <ProductGrid products={filteredProducts} />
+            {!loading && error && (
+              <div className="rounded-2xl border border-outline-variant bg-surface p-10 text-center">
+                <h3 className="text-lg font-semibold text-text">
+                  Unable to load products
+                </h3>
+
+                <p className="mt-2 text-sm text-text-secondary">{error}</p>
+
+                <div className="mt-5">
+                  <Button
+                    variant="outlined"
+                    onClick={() => window.location.reload()}
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!loading && !error && <ProductGrid products={sortedProducts} />}
           </section>
         </div>
       </div>
@@ -464,8 +505,6 @@ function Products() {
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-100 lg:hidden">
-          {/* Backdrop */}
-
           <button
             type="button"
             aria-label="Close filters"
@@ -477,8 +516,6 @@ function Products() {
               backdrop-blur-sm
             "
           />
-
-          {/* Drawer */}
 
           <aside
             className="
@@ -493,8 +530,6 @@ function Products() {
               shadow-2xl
             "
           >
-            {/* Drawer header */}
-
             <div className="flex items-center justify-between border-b border-outline-variant bg-surface px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-text">Filters</h2>
@@ -525,8 +560,6 @@ function Products() {
               </button>
             </div>
 
-            {/* Drawer content */}
-
             <div className="flex-1 overflow-y-auto p-5">
               <ProductFilters
                 category={category}
@@ -538,10 +571,10 @@ function Products() {
                 maxPrice={maxPrice}
                 setMaxPrice={setMaxPrice}
                 onClear={clearFilters}
+                categories={categories}
+                categoriesLoading={categoriesLoading}
               />
             </div>
-
-            {/* Drawer footer */}
 
             <div className="border-t border-outline-variant bg-surface p-4">
               <Button
@@ -549,8 +582,8 @@ function Products() {
                 className="w-full"
                 onClick={() => setIsFilterOpen(false)}
               >
-                Show {filteredProducts.length}{" "}
-                {filteredProducts.length === 1 ? "Product" : "Products"}
+                Show {sortedProducts.length}{" "}
+                {sortedProducts.length === 1 ? "Product" : "Products"}
               </Button>
             </div>
           </aside>

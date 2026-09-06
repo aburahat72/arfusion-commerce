@@ -1,11 +1,20 @@
 import { v2 as cloudinary } from "cloudinary";
 
-// Configure Cloudinary
+// =====================================================
+// CLOUDINARY CONFIGURATION
+// =====================================================
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+
+  // Allow longer image upload requests
+  timeout: 120000,
 });
 
-// Export configured Cloudinary instance
+// =====================================================
+// EXPORT CONFIGURED CLOUDINARY INSTANCE
+// =====================================================
+
 export default cloudinary;

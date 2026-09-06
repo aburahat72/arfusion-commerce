@@ -24,20 +24,39 @@ const router = express.Router();
 // =====================================================
 
 // GET /api/categories
+//
+// Returns all active categories
 router.get("/", getActiveCategories);
-
-// GET /api/categories/:slug
-router.get("/:slug", getCategoryBySlug);
 
 // =====================================================
 // ADMIN
 // =====================================================
 
 // GET /api/categories/admin/all
+//
+// IMPORTANT:
+// This route must come BEFORE /:slug
+// so "admin" is not treated as a category slug.
 router.get("/admin/all", protectedRoute, authorize("admin"), getAllCategories);
 
-// CREATE
+// =====================================================
+// PUBLIC SINGLE CATEGORY
+// =====================================================
+
+// GET /api/categories/:slug
+//
+// Example:
+// GET /api/categories/electronics
+router.get("/:slug", getCategoryBySlug);
+
+// =====================================================
+// ADMIN CREATE
+// =====================================================
+
 // POST /api/categories
+//
+// multipart/form-data
+// image: category image
 router.post(
   "/",
   protectedRoute,
@@ -46,8 +65,14 @@ router.post(
   createCategory,
 );
 
-// UPDATE
+// =====================================================
+// ADMIN UPDATE
+// =====================================================
+
 // PUT /api/categories/:id
+//
+// multipart/form-data
+// image: optional new category image
 router.put(
   "/:id",
   protectedRoute,
@@ -56,7 +81,10 @@ router.put(
   updateCategory,
 );
 
-// ENABLE / DISABLE
+// =====================================================
+// ADMIN ENABLE / DISABLE
+// =====================================================
+
 // PATCH /api/categories/:id/status
 router.patch(
   "/:id/status",
@@ -65,7 +93,10 @@ router.patch(
   toggleCategoryStatus,
 );
 
-// DELETE
+// =====================================================
+// ADMIN DELETE
+// =====================================================
+
 // DELETE /api/categories/:id
 router.delete("/:id", protectedRoute, authorize("admin"), deleteCategory);
 

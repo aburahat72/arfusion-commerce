@@ -24,9 +24,51 @@ function ProductActions({ product }) {
 
   const [quantity, setQuantity] = useState(1);
 
-  const productId = product.id || product._id;
+  /* =====================================================
+     REAL PRODUCT ID
+  ===================================================== */
 
-  const isOutOfStock = Number(product.stock) <= 0;
+  const productId = product._id || product.id;
+
+  /* =====================================================
+     REAL PRODUCT IMAGE
+  ===================================================== */
+
+  /*
+   * MongoDB product uses:
+   *
+   * images: [
+   *   {
+   *     url,
+   *     publicId
+   *   }
+   * ]
+   *
+   * Keep fallback support for old static products.
+   */
+
+  const productImage =
+    product.images?.[0]?.url ||
+    product.images?.[0] ||
+    product.image ||
+    "";
+
+  /* =====================================================
+     STOCK
+  ===================================================== */
+
+  const stock = Number(product.stock ?? 0);
+
+  const isOutOfStock = stock <= 0;
+
+  /* =====================================================
+     CATEGORY
+  ===================================================== */
+
+  const categoryName =
+    typeof product.category === "object"
+      ? product.category?.name
+      : product.categoryLabel || product.category;
 
   /* =====================================================
      WISHLIST STATE
@@ -55,7 +97,7 @@ function ProductActions({ product }) {
   ===================================================== */
 
   const increaseQuantity = () => {
-    if (quantity < Number(product.stock)) {
+    if (quantity < stock) {
       setQuantity((current) => current + 1);
     }
   };
@@ -76,10 +118,14 @@ function ProductActions({ product }) {
     dispatch(
       addToCart({
         id: productId,
+        _id: productId,
         name: product.name,
         price: product.price,
-        image: product.image,
+        image: productImage,
+        images: product.images || [],
         quantity,
+        stock,
+        category: categoryName,
       }),
     );
   };
@@ -96,10 +142,14 @@ function ProductActions({ product }) {
     dispatch(
       startBuyNow({
         id: productId,
+        _id: productId,
         name: product.name,
         price: product.price,
-        image: product.image,
+        image: productImage,
+        images: product.images || [],
         quantity,
+        stock,
+        category: categoryName,
       }),
     );
 
@@ -114,15 +164,19 @@ function ProductActions({ product }) {
     dispatch(
       toggleWishlist({
         id: productId,
+        _id: productId,
         name: product.name,
         price: product.price,
-        image: product.image,
-        category: product.category,
-        categoryLabel: product.categoryLabel,
+        image: productImage,
+        images: product.images || [],
+        category: categoryName,
+        categoryLabel: categoryName,
         rating: product.rating,
         reviewCount: product.reviewCount,
-        stock: product.stock,
+        stock,
         brand: product.brand,
+        sku: product.sku,
+        description: product.description,
       }),
     );
   };
@@ -139,14 +193,16 @@ function ProductActions({ product }) {
     dispatch(
       toggleCompare({
         id: productId,
+        _id: productId,
         name: product.name,
         price: product.price,
-        image: product.image,
-        category: product.category,
-        categoryLabel: product.categoryLabel,
+        image: productImage,
+        images: product.images || [],
+        category: categoryName,
+        categoryLabel: categoryName,
         rating: product.rating,
         reviewCount: product.reviewCount,
-        stock: product.stock,
+        stock,
         brand: product.brand,
         oldPrice: product.oldPrice,
         discount: product.discount,
@@ -191,15 +247,15 @@ function ProductActions({ product }) {
             variant="standard"
             size="small"
             onClick={increaseQuantity}
-            disabled={isOutOfStock || quantity >= Number(product.stock)}
+            disabled={isOutOfStock || quantity >= stock}
           >
             <Plus size={17} />
           </IconButton>
         </div>
 
-        {!isOutOfStock && Number(product.stock) <= 10 && (
+        {!isOutOfStock && stock <= 10 && (
           <p className="mt-2 text-xs font-medium text-warning">
-            Only {product.stock} left in stock
+            Only {stock} left in stock
           </p>
         )}
       </div>
@@ -256,7 +312,9 @@ function ProductActions({ product }) {
           disabled={compareLimitReached}
           aria-pressed={isCompared}
           title={
-            compareLimitReached ? "You can compare up to 4 products" : undefined
+            compareLimitReached
+              ? "You can compare up to 4 products"
+              : undefined
           }
         >
           <GitCompareArrows size={18} />
@@ -287,3 +345,4 @@ function ProductActions({ product }) {
 }
 
 export default ProductActions;
+

@@ -28,15 +28,23 @@ import upload from "../middleware/upload.middleware.js";
 const router = express.Router();
 
 // =====================================================
-// PUBLIC
+// PUBLIC PRODUCTS
 // =====================================================
 
+// GET /api/products
 router.get("/", getAllProducts);
 
+// GET /api/products/:id
+// IMPORTANT:
+// This must stay AFTER /admin routes so /admin/all and
+// /admin/:id are handled correctly.
+router.get("/:id", getProductById);
+
 // =====================================================
-// ADMIN
+// ADMIN PRODUCTS
 // =====================================================
 
+// GET /api/products/admin/all
 router.get(
   "/admin/all",
   protectedRoute,
@@ -44,6 +52,7 @@ router.get(
   getAllAdminProducts,
 );
 
+// GET /api/products/admin/:id
 router.get(
   "/admin/:id",
   protectedRoute,
@@ -51,6 +60,11 @@ router.get(
   getAdminProductById,
 );
 
+// =====================================================
+// CREATE PRODUCT
+// =====================================================
+
+// POST /api/products
 router.post(
   "/",
   protectedRoute,
@@ -60,14 +74,12 @@ router.post(
   createProduct,
 );
 
-router.patch(
-  "/:id/status",
-  protectedRoute,
-  authorize("admin"),
-  toggleProductStatus,
-);
+// =====================================================
+// UPDATE PRODUCT
+// =====================================================
 
-router.patch(
+// PUT /api/products/:id
+router.put(
   "/:id",
   protectedRoute,
   authorize("admin"),
@@ -76,12 +88,23 @@ router.patch(
   updateProduct,
 );
 
+// =====================================================
+// TOGGLE PRODUCT STATUS
+// =====================================================
+
+// PATCH /api/products/:id/status
+router.patch(
+  "/:id/status",
+  protectedRoute,
+  authorize("admin"),
+  toggleProductStatus,
+);
+
+// =====================================================
+// DELETE PRODUCT
+// =====================================================
+
+// DELETE /api/products/:id
 router.delete("/:id", protectedRoute, authorize("admin"), deleteProduct);
-
-// =====================================================
-// PUBLIC SINGLE PRODUCT
-// =====================================================
-
-router.get("/:id", getProductById);
 
 export default router;

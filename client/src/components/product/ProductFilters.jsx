@@ -13,37 +13,30 @@ function ProductFilters({
   maxPrice = "",
   setMaxPrice,
   onClear,
+  categories = [],
+  categoriesLoading = false,
 }) {
+  /* =====================================================
+     REAL CATEGORY OPTIONS
+  ===================================================== */
+
   const categoryOptions = [
     {
       value: "",
       label: "All Categories",
     },
-    {
-      value: "electronics",
-      label: "Electronics",
-    },
-    {
-      value: "fashion",
-      label: "Fashion",
-    },
-    {
-      value: "shoes",
-      label: "Shoes",
-    },
-    {
-      value: "beauty",
-      label: "Beauty",
-    },
-    {
-      value: "furniture",
-      label: "Furniture",
-    },
-    {
-      value: "sports",
-      label: "Sports",
-    },
+
+    ...categories
+      .filter((item) => item && (item.name || item.slug || item._id))
+      .map((item) => ({
+        value: item.slug || item._id,
+        label: item.name,
+      })),
   ];
+
+  /* =====================================================
+     SORT OPTIONS
+  ===================================================== */
 
   const sortOptions = [
     {
@@ -71,6 +64,7 @@ function ProductFilters({
   return (
     <aside className="rounded-2xl border border-outline-variant bg-surface p-5">
       {/* Header */}
+
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={19} className="text-primary" />
@@ -85,6 +79,7 @@ function ProductFilters({
       </div>
 
       {/* Category */}
+
       <div className="border-t border-outline-variant pt-5">
         <Select
           label="Category"
@@ -92,10 +87,12 @@ function ProductFilters({
           value={category}
           onChange={(event) => setCategory(event.target.value)}
           options={categoryOptions}
+          disabled={categoriesLoading}
         />
       </div>
 
       {/* Price */}
+
       <div className="mt-5 border-t border-outline-variant pt-5">
         <h3 className="mb-3 text-sm font-semibold text-text">Price Range</h3>
 
@@ -151,6 +148,7 @@ function ProductFilters({
       </div>
 
       {/* Sort */}
+
       <div className="mt-5 border-t border-outline-variant pt-5">
         <Select
           label="Sort By"

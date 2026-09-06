@@ -1,6 +1,10 @@
 import ProductCard from "./ProductCard";
 
 function ProductGrid({ products = [] }) {
+  /* =====================================================
+     NO PRODUCTS
+  ===================================================== */
+
   if (products.length === 0) {
     return (
       <div className="rounded-2xl border border-outline-variant bg-surface p-10 text-center">
@@ -12,6 +16,10 @@ function ProductGrid({ products = [] }) {
       </div>
     );
   }
+
+  /* =====================================================
+     REAL PRODUCT GRID
+  ===================================================== */
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

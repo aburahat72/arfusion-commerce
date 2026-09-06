@@ -11,23 +11,79 @@ function ProductCard({ product }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  /* =====================================================
+     REAL PRODUCT ID
+  ===================================================== */
+
+  const productId = product._id || product.id;
+
+  /* =====================================================
+     REAL PRODUCT IMAGE
+
+     MongoDB product:
+
+     images: [
+       {
+         url,
+         publicId
+       }
+     ]
+  ===================================================== */
+
+  const productImage =
+    product.images?.[0]?.url ||
+    (typeof product.images?.[0] === "string" ? product.images[0] : null) ||
+    product.image ||
+    "";
+
+  /* =====================================================
+     REAL CATEGORY
+
+     Backend returns populated category object:
+
+     category: {
+       _id,
+       name,
+       slug,
+       image,
+       isActive
+     }
+  ===================================================== */
+
+  const categoryName =
+    typeof product.category === "object"
+      ? product.category?.name
+      : product.categoryLabel || product.category || "";
+
+  /* =====================================================
+     OPEN PRODUCT
+  ===================================================== */
+
   const openProduct = () => {
-    navigate(`/products/${product.id || product._id}`);
+    navigate(`/products/${productId}`);
   };
+
+  /* =====================================================
+     ADD TO CART
+  ===================================================== */
 
   const handleAddToCart = (event) => {
     event.stopPropagation();
 
     dispatch(
       addToCart({
-        id: product.id || product._id,
+        id: productId,
         name: product.name,
         price: product.price,
-        image: product.image,
+        image: productImage,
         quantity: 1,
       }),
     );
   };
+
+  /* =====================================================
+     WISHLIST
+  ===================================================== */
 
   const handleWishlist = (event) => {
     event.stopPropagation();
@@ -35,6 +91,10 @@ function ProductCard({ product }) {
     // Wishlist functionality will be added later.
     console.log("Wishlist:", product.name);
   };
+
+  /* =====================================================
+     RENDER
+  ===================================================== */
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-outline-variant bg-surface transition duration-200 hover:-translate-y-1 hover:border-primary/20 hover:shadow-lg">
@@ -67,7 +127,7 @@ function ProductCard({ product }) {
         </div>
 
         <img
-          src={product.image}
+          src={productImage}
           alt={product.name}
           className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
         />
@@ -77,7 +137,7 @@ function ProductCard({ product }) {
       <div className="p-4">
         <button type="button" onClick={openProduct} className="text-left">
           <p className="text-xs font-medium capitalize text-text-secondary">
-            {product.category}
+            {categoryName}
           </p>
 
           <h3 className="mt-1 min-h-10 text-sm font-semibold text-text">
@@ -89,9 +149,9 @@ function ProductCard({ product }) {
         <div className="mt-2 flex items-center gap-1 text-xs">
           <Star size={14} className="fill-amber-400 text-amber-400" />
 
-          <span className="font-medium text-text">{product.rating}</span>
+          <span className="font-medium text-text">{product.rating ?? 0}</span>
 
-          {product.reviewCount && (
+          {product.reviewCount !== undefined && (
             <span className="text-text-secondary">({product.reviewCount})</span>
           )}
         </div>
