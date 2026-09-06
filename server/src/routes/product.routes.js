@@ -32,19 +32,47 @@ const router = express.Router();
 // =====================================================
 
 // GET /api/products
-router.get("/", getAllProducts);
+//
+// Returns all active products
+//
+// Supported:
+// ?search=samsung
+// ?category=electronics
+// ?minPrice=500
+// ?maxPrice=50000
+// ?page=1
+// ?limit=20
 
-// GET /api/products/:id
-// IMPORTANT:
-// This must stay AFTER /admin routes so /admin/all and
-// /admin/:id are handled correctly.
-router.get("/:id", getProductById);
+router.get("/", getAllProducts);
 
 // =====================================================
 // ADMIN PRODUCTS
 // =====================================================
 
+// IMPORTANT:
+// These routes MUST come BEFORE:
+//
+// router.get("/:id", getProductById);
+//
+// Otherwise Express can treat "admin" as the product ID.
+
+// -----------------------------------------------------
+// GET ALL PRODUCTS
+// ADMIN
+// -----------------------------------------------------
+
 // GET /api/products/admin/all
+//
+// Returns all products for admin
+//
+// Includes:
+// - Active products
+// - Inactive products
+// - Search
+// - Category filter
+// - Stock filter
+// - Pagination
+
 router.get(
   "/admin/all",
   protectedRoute,
@@ -52,7 +80,16 @@ router.get(
   getAllAdminProducts,
 );
 
+// -----------------------------------------------------
+// GET SINGLE PRODUCT
+// ADMIN
+// -----------------------------------------------------
+
 // GET /api/products/admin/:id
+//
+// Returns a single product for admin
+// including inactive products.
+
 router.get(
   "/admin/:id",
   protectedRoute,
@@ -61,10 +98,42 @@ router.get(
 );
 
 // =====================================================
+// PUBLIC SINGLE PRODUCT
+// =====================================================
+
+// GET /api/products/:id
+//
+// IMPORTANT:
+// This route MUST remain AFTER all /admin routes.
+//
+// Otherwise:
+//
+// /api/products/admin/all
+//
+// could be interpreted as:
+//
+// id = "admin"
+
+router.get("/:id", getProductById);
+
+// =====================================================
 // CREATE PRODUCT
+// ADMIN
 // =====================================================
 
 // POST /api/products
+//
+// multipart/form-data
+//
+// Fields:
+// - name
+// - description
+// - price
+// - stock
+// - category
+// - isActive
+// - images
+
 router.post(
   "/",
   protectedRoute,
@@ -76,9 +145,22 @@ router.post(
 
 // =====================================================
 // UPDATE PRODUCT
+// ADMIN
 // =====================================================
 
 // PUT /api/products/:id
+//
+// multipart/form-data
+//
+// Fields:
+// - name
+// - description
+// - price
+// - stock
+// - category
+// - isActive
+// - images
+
 router.put(
   "/:id",
   protectedRoute,
@@ -89,10 +171,16 @@ router.put(
 );
 
 // =====================================================
-// TOGGLE PRODUCT STATUS
+// ENABLE / DISABLE PRODUCT
+// ADMIN
 // =====================================================
 
 // PATCH /api/products/:id/status
+//
+// Toggles:
+// true  -> false
+// false -> true
+
 router.patch(
   "/:id/status",
   protectedRoute,
@@ -102,9 +190,15 @@ router.patch(
 
 // =====================================================
 // DELETE PRODUCT
+// ADMIN
 // =====================================================
 
 // DELETE /api/products/:id
+
 router.delete("/:id", protectedRoute, authorize("admin"), deleteProduct);
+
+// =====================================================
+// EXPORT ROUTER
+// =====================================================
 
 export default router;

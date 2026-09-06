@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import cloudinary from "../config/cloudinary.js";
 import Category from "../models/category.model.js";
+import Product from "../models/product.model.js";
 
 import { uploadToCloudinary } from "../../utils/cloudinaryUpload.js";
 
@@ -41,15 +42,99 @@ const isValidObjectId = (id) => {
 // Public
 //
 // GET /api/categories
+//
+// Returns:
+// - Active categories only
+// - Active product count for each category
 // =====================================================
 
 export const getActiveCategories = async (req, res) => {
   try {
-    const categories = await Category.find({
-      isActive: true,
-    }).sort({
-      name: 1,
-    });
+    const categories = await Category.aggregate([
+      // -------------------------------------------------
+      // ONLY ACTIVE CATEGORIES
+      // -------------------------------------------------
+
+      {
+        $match: {
+          isActive: true,
+        },
+      },
+
+      // -------------------------------------------------
+      // FIND ACTIVE PRODUCTS FOR EACH CATEGORY
+      // -------------------------------------------------
+
+      {
+        $lookup: {
+          from: "products",
+
+          let: {
+            categoryId: "$_id",
+          },
+
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ["$category", "$$categoryId"],
+                    },
+                    {
+                      $eq: ["$isActive", true],
+                    },
+                  ],
+                },
+              },
+            },
+
+            {
+              $count: "count",
+            },
+          ],
+
+          as: "productCountData",
+        },
+      },
+
+      // -------------------------------------------------
+      // CONVERT COUNT ARRAY TO NUMBER
+      // -------------------------------------------------
+
+      {
+        $addFields: {
+          productCount: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$productCountData.count", 0],
+              },
+              0,
+            ],
+          },
+        },
+      },
+
+      // -------------------------------------------------
+      // REMOVE TEMPORARY FIELD
+      // -------------------------------------------------
+
+      {
+        $project: {
+          productCountData: 0,
+        },
+      },
+
+      // -------------------------------------------------
+      // SORT BY CATEGORY NAME
+      // -------------------------------------------------
+
+      {
+        $sort: {
+          name: 1,
+        },
+      },
+    ]);
 
     return res.status(200).json({
       success: true,
@@ -71,13 +156,89 @@ export const getActiveCategories = async (req, res) => {
 // Admin only
 //
 // GET /api/categories/admin/all
+//
+// Returns:
+// - All categories
+// - Active product count for each category
 // =====================================================
 
 export const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find().sort({
-      createdAt: -1,
-    });
+    const categories = await Category.aggregate([
+      // -------------------------------------------------
+      // FIND ACTIVE PRODUCTS FOR EACH CATEGORY
+      // -------------------------------------------------
+
+      {
+        $lookup: {
+          from: "products",
+
+          let: {
+            categoryId: "$_id",
+          },
+
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $eq: ["$category", "$$categoryId"],
+                    },
+                    {
+                      $eq: ["$isActive", true],
+                    },
+                  ],
+                },
+              },
+            },
+
+            {
+              $count: "count",
+            },
+          ],
+
+          as: "productCountData",
+        },
+      },
+
+      // -------------------------------------------------
+      // CONVERT COUNT ARRAY TO NUMBER
+      // -------------------------------------------------
+
+      {
+        $addFields: {
+          productCount: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$productCountData.count", 0],
+              },
+              0,
+            ],
+          },
+        },
+      },
+
+      // -------------------------------------------------
+      // REMOVE TEMPORARY FIELD
+      // -------------------------------------------------
+
+      {
+        $project: {
+          productCountData: 0,
+        },
+      },
+
+      // -------------------------------------------------
+      // SORT NEWEST CATEGORY FIRST
+      // -------------------------------------------------
+
+      {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+    ]);
 
     return res.status(200).json({
       success: true,
@@ -394,17 +555,6 @@ export const updateCategory = async (req, res) => {
     // =================================================
     // DUPLICATE NAME CHECK
     // =================================================
-    //
-    // IMPORTANT:
-    // We do NOT use:
-    //
-    // _id: { $ne: category._id }
-    //
-    // because that caused your CastError.
-    //
-    // Instead we find the possible duplicate and
-    // compare its ID in JavaScript.
-    // =================================================
 
     const existingName = await Category.findOne({
       name: new RegExp(`^${escapeRegex(cleanName)}$`, "i"),
@@ -498,8 +648,6 @@ export const updateCategory = async (req, res) => {
       try {
         await cloudinary.uploader.destroy(oldPublicId);
       } catch (cloudinaryError) {
-        // Do not fail the entire update because
-        // MongoDB was successfully updated.
         console.error("Old Cloudinary image deletion error:", cloudinaryError);
       }
     }
@@ -688,8 +836,6 @@ export const deleteCategory = async (req, res) => {
       try {
         await cloudinary.uploader.destroy(category.image.publicId);
       } catch (cloudinaryError) {
-        // MongoDB category has already been deleted.
-        // Log Cloudinary failure for cleanup.
         console.error("Cloudinary image deletion error:", cloudinaryError);
       }
     }
