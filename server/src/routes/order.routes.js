@@ -6,12 +6,11 @@ import {
   getOrderById,
   cancelOrder,
   getAllOrders,
+  getAdminOrderById,
   updateOrderStatus,
 } from "../controllers/order.controller.js";
 
-import {
-  protectedRoute as customerProtectedRoute,
-} from "../middleware/customerAuth.middleware.js";
+import { protectedRoute as customerProtectedRoute } from "../middleware/customerAuth.middleware.js";
 
 import {
   protectedRoute as adminProtectedRoute,
@@ -27,7 +26,9 @@ import {
 
 const router = express.Router();
 
-// Place order
+// =====================================================
+// CUSTOMER - PLACE ORDER
+// =====================================================
 
 router.post(
   "/",
@@ -36,32 +37,44 @@ router.post(
   placeOrder,
 );
 
-// Get logged-in user's orders
+// =====================================================
+// CUSTOMER - GET MY ORDERS
+// =====================================================
 
 router.get("/my-orders", customerProtectedRoute, getMyOrders);
 
-// Get single order
+// =====================================================
+// ADMIN - GET ALL ORDERS
+// =====================================================
+
+router.get("/", adminProtectedRoute, adminAuthorize("admin"), getAllOrders);
+
+// =====================================================
+// ADMIN - GET SINGLE ORDER
+// =====================================================
+
+router.get(
+  "/admin/:orderId",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getAdminOrderById,
+);
+
+// =====================================================
+// CUSTOMER - GET SINGLE ORDER
+// =====================================================
 
 router.get("/:orderId", customerProtectedRoute, getOrderById);
 
-// Cancel order
+// =====================================================
+// CUSTOMER - CANCEL ORDER
+// =====================================================
 
-router.patch(
-  "/:orderId/cancel",
-  customerProtectedRoute,
-  cancelOrder,
-);
+router.patch("/:orderId/cancel", customerProtectedRoute, cancelOrder);
 
-// Admin - Get all orders
-
-router.get(
-  "/",
-  adminProtectedRoute,
-  adminAuthorize("admin"),
-  getAllOrders,
-);
-
-// Admin - Update order status
+// =====================================================
+// ADMIN - UPDATE ORDER STATUS
+// =====================================================
 
 router.patch(
   "/:orderId/status",

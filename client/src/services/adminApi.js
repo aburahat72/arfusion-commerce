@@ -23,7 +23,7 @@ adminApi.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Let Axios/browser set multipart boundary
+    // Let browser set multipart boundary
     if (config.data instanceof FormData) {
       delete config.headers["Content-Type"];
       delete config.headers["content-type"];
@@ -31,9 +31,7 @@ adminApi.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  },
+  (error) => Promise.reject(error),
 );
 
 // =====================================================
@@ -48,7 +46,6 @@ adminApi.interceptors.response.use(
       console.warn("Admin authentication expired or invalid.");
 
       localStorage.removeItem("arfusion_admin_token");
-
       localStorage.removeItem("arfusion_admin_user");
     }
 
@@ -61,34 +58,81 @@ adminApi.interceptors.response.use(
 );
 
 // =====================================================
-// CUSTOMER MANAGEMENT API
+// CUSTOMER MANAGEMENT
 // =====================================================
 
-// Get all customers
 export const getCustomers = () => {
   return adminApi.get("/admin/customers");
 };
 
-// Get single customer
 export const getCustomerById = (id) => {
   return adminApi.get(`/admin/customers/${id}`);
 };
 
-// Activate / Block customer
 export const updateCustomerStatus = (id, isActive) => {
   return adminApi.patch(`/admin/customers/${id}/status`, {
     isActive,
   });
 };
 
-// Update customer
 export const updateCustomer = (id, data) => {
   return adminApi.patch(`/admin/customers/${id}`, data);
 };
 
-// Delete customer
 export const deleteCustomer = (id) => {
   return adminApi.delete(`/admin/customers/${id}`);
+};
+
+// =====================================================
+// ORDERS
+// =====================================================
+
+// Get all real orders
+export const getAdminOrders = (params = {}) => {
+  return adminApi.get("/orders", {
+    params,
+  });
+};
+
+// Get one real order
+export const getAdminOrderById = (orderId) => {
+  return adminApi.get(`/orders/admin/${orderId}`);
+};
+
+// Update order stage
+export const updateAdminOrderStatus = (orderId, orderStatus) => {
+  return adminApi.patch(`/orders/${orderId}/status`, {
+    orderStatus,
+  });
+};
+
+// =====================================================
+// RETURNS
+// =====================================================
+
+// Get all return requests
+export const getAdminReturnRequests = () => {
+  return adminApi.get("/returns");
+};
+
+// Approve return
+export const approveReturn = (orderId) => {
+  return adminApi.put(`/returns/${orderId}/approve`);
+};
+
+// Reject return
+export const rejectReturn = (orderId) => {
+  return adminApi.put(`/returns/${orderId}/reject`);
+};
+
+// Complete refund
+export const completeRefund = (orderId) => {
+  return adminApi.put(`/returns/${orderId}/complete-refund`);
+};
+
+// Complete replacement
+export const completeReplacement = (orderId) => {
+  return adminApi.put(`/returns/${orderId}/complete-replacement`);
 };
 
 // =====================================================
