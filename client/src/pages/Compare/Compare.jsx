@@ -3,7 +3,6 @@ import {
   GitCompareArrows,
   ShoppingCart,
   Trash2,
-  X,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -12,11 +11,13 @@ import Button from "../../components/ui/Button";
 import IconButton from "../../components/ui/IconButton";
 
 import {
-  clearCompare,
   removeFromCompare,
+  clearCompare,
 } from "../../store/slices/compareSlice";
 
-import { addToCart } from "../../store/slices/cartSlice";
+import { addProductToCart } from "../../store/slices/cartSlice";
+
+import { formatCurrency } from "../../utils/currency";
 
 function Compare() {
   const dispatch = useDispatch();
@@ -24,28 +25,47 @@ function Compare() {
 
   const compareItems = useSelector((state) => state.compare.items);
 
+  const cartActionLoading = useSelector(
+    (state) => state.cart?.actionLoading ?? false,
+  );
+
   /* =====================================================
      ADD TO CART
   ===================================================== */
 
-  const handleAddToCart = (product) => {
-    if (Number(product.stock) <= 0) {
+  const handleAddToCart = async (product) => {
+    const productId = product.id || product._id;
+
+    if (!productId) {
+      console.error("Cannot add product to cart: product ID is missing.");
+
       return;
     }
 
-    dispatch(
-      addToCart({
-        id: product.id || product._id,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        quantity: 1,
-      }),
-    );
+    if (Number(product.stock ?? 0) <= 0) {
+      return;
+    }
+
+    if (cartActionLoading) {
+      return;
+    }
+
+    try {
+      await dispatch(
+        addProductToCart({
+          productId,
+          quantity: 1,
+        }),
+      ).unwrap();
+
+      console.log(`Added "${product.name}" to cart successfully.`);
+    } catch (error) {
+      console.error("Failed to add product to cart:", error);
+    }
   };
 
   /* =====================================================
-     EMPTY STATE
+     EMPTY COMPARE
   ===================================================== */
 
   if (compareItems.length === 0) {
@@ -53,18 +73,24 @@ function Compare() {
       <main className="min-h-screen bg-background py-12 sm:py-16">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-outline-variant bg-surface p-10 text-center shadow-sm sm:p-14">
+            {/* Icon */}
+
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-container text-primary">
-              <GitCompareArrows size={30} />
+              <GitCompareArrows size={28} />
             </div>
 
+            {/* Heading */}
+
             <h1 className="mt-5 text-2xl font-semibold text-text">
-              No products to compare
+              Your compare list is empty
             </h1>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">
               Add products to compare their prices, ratings, specifications, and
               other details.
             </p>
+
+            {/* Button */}
 
             <div className="mt-6 flex justify-center">
               <Button size="large" onClick={() => navigate("/products")}>
@@ -79,7 +105,7 @@ function Compare() {
   }
 
   /* =====================================================
-     COMPARE PAGE
+     COMPARE
   ===================================================== */
 
   return (
@@ -119,13 +145,13 @@ function Compare() {
               </h1>
 
               <p className="mt-1 text-sm text-text-secondary">
-                Compare {compareItems.length}{" "}
-                {compareItems.length === 1 ? "product" : "products"}
+                {compareItems.length}{" "}
+                {compareItems.length === 1 ? "product" : "products"} selected
               </p>
             </div>
           </div>
 
-          {/* Clear all */}
+          {/* Clear compare */}
 
           <Button
             variant="text"
@@ -133,283 +159,440 @@ function Compare() {
             onClick={() => dispatch(clearCompare())}
           >
             <Trash2 size={16} />
-            Clear comparison
+            Clear Compare
           </Button>
         </div>
 
         {/* =================================================
-            MOBILE NOTE
+            DESKTOP COMPARISON TABLE
         ================================================= */}
 
-        <div className="mb-5 rounded-2xl bg-primary-container p-4 lg:hidden">
-          <p className="text-sm font-medium text-text">
-            Swipe horizontally to compare
-          </p>
+        <div className="hidden overflow-x-auto rounded-3xl border border-outline-variant bg-surface shadow-sm lg:block">
+          <table className="w-full min-w-[900px] border-collapse">
+            <thead>
+              <tr className="border-b border-outline-variant">
+                <th className="w-48 p-5 text-left text-sm font-semibold text-text">
+                  Product
+                </th>
 
-          <p className="mt-1 text-xs text-text-secondary">
-            You can compare up to 4 products at once.
-          </p>
+                {compareItems.map((item) => {
+                  const productId = item.id || item._id;
+
+                  const productImage =
+                    item.images?.[0]?.url ||
+                    (typeof item.images?.[0] === "string"
+                      ? item.images[0]
+                      : null) ||
+                    item.image ||
+                    "";
+
+                  return (
+                    <th
+                      key={productId}
+                      className="min-w-[230px] p-5 align-top text-left"
+                    >
+                      <div className="relative">
+                        {/* Remove */}
+
+                        <IconButton
+                          label={`Remove ${item.name} from compare`}
+                          size="small"
+                          variant="standard"
+                          onClick={() => dispatch(removeFromCompare(productId))}
+                          className="absolute right-0 top-0"
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
+
+                        {/* Image */}
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/products/${productId}`)}
+                          className="block w-full text-left"
+                        >
+                          <div className="mb-4 aspect-square overflow-hidden rounded-2xl bg-surface-container">
+                            {productImage ? (
+                              <img
+                                src={productImage}
+                                alt={item.name}
+                                className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-sm text-text-secondary">
+                                No image available
+                              </div>
+                            )}
+                          </div>
+
+                          <h2 className="pr-8 text-base font-semibold text-text hover:text-primary">
+                            {item.name}
+                          </h2>
+                        </button>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+
+            <tbody>
+              {/* Category */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Category
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 text-sm text-text"
+                  >
+                    {item.categoryLabel ||
+                      item.category?.name ||
+                      item.category ||
+                      "—"}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Brand */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Brand
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 text-sm text-text"
+                  >
+                    {item.brand || "—"}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Price */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Price
+                </td>
+
+                {compareItems.map((item) => (
+                  <td key={item.id || item._id} className="p-5">
+                    <p className="text-lg font-bold text-text">
+                      {formatCurrency(item.price)}
+                    </p>
+
+                    {item.oldPrice && (
+                      <p className="text-xs text-text-secondary line-through">
+                        {formatCurrency(item.oldPrice)}
+                      </p>
+                    )}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Discount */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Discount
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 text-sm font-medium text-primary"
+                  >
+                    {item.discount || "—"}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Rating */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Rating
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 text-sm text-text"
+                  >
+                    {item.rating ?? 0}
+
+                    {item.reviewCount !== undefined &&
+                      item.reviewCount !== null && (
+                        <span className="ml-1 text-text-secondary">
+                          ({item.reviewCount})
+                        </span>
+                      )}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Stock */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Stock
+                </td>
+
+                {compareItems.map((item) => {
+                  const stock = Number(item.stock ?? 0);
+
+                  return (
+                    <td key={item.id || item._id} className="p-5 text-sm">
+                      {stock > 0 ? (
+                        <span className="font-medium text-success">
+                          {stock} available
+                        </span>
+                      ) : (
+                        <span className="font-medium text-error">
+                          Out of stock
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* SKU */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  SKU
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 text-sm text-text"
+                  >
+                    {item.sku || "—"}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Description */}
+
+              <tr className="border-b border-outline-variant">
+                <td className="p-5 align-top text-sm font-medium text-text-secondary">
+                  Description
+                </td>
+
+                {compareItems.map((item) => (
+                  <td
+                    key={item.id || item._id}
+                    className="p-5 align-top text-sm leading-6 text-text-secondary"
+                  >
+                    {item.description || "No description available."}
+                  </td>
+                ))}
+              </tr>
+
+              {/* Cart */}
+
+              <tr>
+                <td className="p-5 text-sm font-medium text-text-secondary">
+                  Action
+                </td>
+
+                {compareItems.map((item) => {
+                  const productId = item.id || item._id;
+
+                  const isOutOfStock = Number(item.stock ?? 0) <= 0;
+
+                  return (
+                    <td key={productId} className="p-5">
+                      <Button
+                        size="medium"
+                        className="w-full"
+                        disabled={isOutOfStock || cartActionLoading}
+                        onClick={() => handleAddToCart(item)}
+                      >
+                        <ShoppingCart size={17} />
+
+                        {isOutOfStock
+                          ? "Out of Stock"
+                          : cartActionLoading
+                            ? "Adding..."
+                            : "Add to Cart"}
+                      </Button>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         {/* =================================================
-            COMPARISON TABLE
+            MOBILE / TABLET PRODUCT CARDS
         ================================================= */}
 
-        <div className="overflow-x-auto rounded-3xl border border-outline-variant bg-surface shadow-sm">
-          <div
-            className="min-w-[760px]"
-            style={{
-              display: "grid",
-              gridTemplateColumns: `180px repeat(${compareItems.length}, minmax(220px, 1fr))`,
-            }}
-          >
-            {/* =================================================
-                PRODUCT ROW
-            ================================================= */}
+        <div className="grid gap-5 sm:grid-cols-2 lg:hidden">
+          {compareItems.map((item) => {
+            const productId = item.id || item._id;
 
-            <div className="border-b border-r border-outline-variant bg-surface-container p-5">
-              <p className="text-sm font-semibold text-text">Product</p>
-            </div>
+            const stock = Number(item.stock ?? 0);
 
-            {compareItems.map((product) => {
-              const productId = product.id || product._id;
+            const isOutOfStock = stock <= 0;
 
-              return (
-                <div
-                  key={productId}
-                  className="relative border-b border-outline-variant p-5"
-                >
+            const productImage =
+              item.images?.[0]?.url ||
+              (typeof item.images?.[0] === "string" ? item.images[0] : null) ||
+              item.image ||
+              "";
+
+            return (
+              <article
+                key={productId}
+                className="overflow-hidden rounded-3xl border border-outline-variant bg-surface shadow-sm"
+              >
+                {/* Image */}
+
+                <div className="relative aspect-square overflow-hidden bg-surface-container">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/products/${productId}`)}
+                    className="h-full w-full"
+                  >
+                    {productImage ? (
+                      <img
+                        src={productImage}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sm text-text-secondary">
+                        No image available
+                      </div>
+                    )}
+                  </button>
+
                   {/* Remove */}
 
                   <IconButton
-                    label={`Remove ${product.name} from comparison`}
-                    size="small"
+                    label={`Remove ${item.name} from compare`}
+                    size="medium"
                     variant="standard"
                     onClick={() => dispatch(removeFromCompare(productId))}
-                    className="absolute right-3 top-3"
+                    className="absolute right-3 top-3 bg-surface/90 backdrop-blur"
                   >
-                    <X size={16} />
+                    <Trash2 size={18} />
                   </IconButton>
+                </div>
 
-                  {/* Image */}
+                {/* Content */}
 
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/products/${productId}`)}
-                    className="block w-full"
-                  >
-                    <div className="mx-auto aspect-square max-w-44 overflow-hidden rounded-2xl bg-surface-container">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="h-full w-full object-cover transition duration-300 hover:scale-105"
-                      />
-                    </div>
-                  </button>
-
-                  {/* Name */}
+                <div className="p-5">
+                  <p className="text-xs font-medium text-primary">
+                    {item.categoryLabel ||
+                      item.category?.name ||
+                      item.category ||
+                      "Product"}
+                  </p>
 
                   <button
                     type="button"
                     onClick={() => navigate(`/products/${productId}`)}
-                    className="mt-4 block w-full text-left"
+                    className="mt-1 block text-left"
                   >
-                    <h2 className="line-clamp-2 text-sm font-semibold text-text hover:text-primary">
-                      {product.name}
+                    <h2 className="text-lg font-semibold text-text">
+                      {item.name}
                     </h2>
                   </button>
-                </div>
-              );
-            })}
 
-            {/* =================================================
-                PRICE
-            ================================================= */}
+                  {/* Price */}
 
-            <CompareLabel label="Price" />
+                  <div className="mt-3">
+                    <p className="text-lg font-bold text-text">
+                      {formatCurrency(item.price)}
+                    </p>
 
-            {compareItems.map((product) => (
-              <div
-                key={`price-${product.id || product._id}`}
-                className="border-b border-outline-variant p-5"
-              >
-                <p className="text-lg font-bold text-text">
-                  ₹{Number(product.price).toLocaleString("en-IN")}
-                </p>
+                    {item.oldPrice && (
+                      <p className="text-xs text-text-secondary line-through">
+                        {formatCurrency(item.oldPrice)}
+                      </p>
+                    )}
+                  </div>
 
-                {product.oldPrice && product.oldPrice > product.price && (
-                  <p className="mt-1 text-xs text-text-secondary line-through">
-                    ₹{Number(product.oldPrice).toLocaleString("en-IN")}
-                  </p>
-                )}
-              </div>
-            ))}
+                  {/* Details */}
 
-            {/* =================================================
-                DISCOUNT
-            ================================================= */}
+                  <div className="mt-4 space-y-2 rounded-2xl bg-surface-container p-4">
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-text-secondary">Brand</span>
 
-            <CompareLabel label="Discount" />
+                      <span className="font-medium text-text">
+                        {item.brand || "—"}
+                      </span>
+                    </div>
 
-            {compareItems.map((product) => (
-              <div
-                key={`discount-${product.id || product._id}`}
-                className="border-b border-outline-variant p-5"
-              >
-                {product.discount ? (
-                  <span className="inline-flex rounded-full bg-primary-container px-3 py-1 text-xs font-semibold text-primary">
-                    {product.discount}
-                  </span>
-                ) : (
-                  <span className="text-sm text-text-secondary">
-                    No discount
-                  </span>
-                )}
-              </div>
-            ))}
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-text-secondary">Rating</span>
 
-            {/* =================================================
-                RATING
-            ================================================= */}
+                      <span className="font-medium text-text">
+                        ★ {item.rating ?? 0}
+                      </span>
+                    </div>
 
-            <CompareLabel label="Rating" />
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-text-secondary">Stock</span>
 
-            {compareItems.map((product) => (
-              <div
-                key={`rating-${product.id || product._id}`}
-                className="border-b border-outline-variant p-5"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-text">
-                    ★ {product.rating || "—"}
-                  </span>
+                      <span
+                        className={
+                          isOutOfStock
+                            ? "font-medium text-error"
+                            : "font-medium text-success"
+                        }
+                      >
+                        {isOutOfStock ? "Out of stock" : `${stock} available`}
+                      </span>
+                    </div>
 
-                  {product.reviewCount && (
-                    <span className="text-xs text-text-secondary">
-                      ({product.reviewCount})
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+                    <div className="flex justify-between gap-4 text-sm">
+                      <span className="text-text-secondary">SKU</span>
 
-            {/* =================================================
-                BRAND
-            ================================================= */}
+                      <span className="font-medium text-text">
+                        {item.sku || "—"}
+                      </span>
+                    </div>
+                  </div>
 
-            <CompareLabel label="Brand" />
+                  {/* Add to cart */}
 
-            {compareItems.map((product) => (
-              <CompareValue
-                key={`brand-${product.id || product._id}`}
-                value={product.brand}
-              />
-            ))}
-
-            {/* =================================================
-                CATEGORY
-            ================================================= */}
-
-            <CompareLabel label="Category" />
-
-            {compareItems.map((product) => (
-              <CompareValue
-                key={`category-${product.id || product._id}`}
-                value={product.categoryLabel || product.category}
-              />
-            ))}
-
-            {/* =================================================
-                SKU
-            ================================================= */}
-
-            <CompareLabel label="SKU" />
-
-            {compareItems.map((product) => (
-              <CompareValue
-                key={`sku-${product.id || product._id}`}
-                value={product.sku}
-              />
-            ))}
-
-            {/* =================================================
-                STOCK
-            ================================================= */}
-
-            <CompareLabel label="Availability" />
-
-            {compareItems.map((product) => {
-              const inStock = Number(product.stock) > 0;
-
-              return (
-                <div
-                  key={`stock-${product.id || product._id}`}
-                  className="border-b border-outline-variant p-5"
-                >
-                  <span
-                    className={
-                      inStock
-                        ? "text-sm font-medium text-success"
-                        : "text-sm font-medium text-error"
-                    }
-                  >
-                    {inStock ? `${product.stock} available` : "Out of stock"}
-                  </span>
-                </div>
-              );
-            })}
-
-            {/* =================================================
-                DESCRIPTION
-            ================================================= */}
-
-            <CompareLabel label="Description" />
-
-            {compareItems.map((product) => (
-              <div
-                key={`description-${product.id || product._id}`}
-                className="border-b border-outline-variant p-5"
-              >
-                <p className="text-sm leading-6 text-text-secondary">
-                  {product.description || "No description available."}
-                </p>
-              </div>
-            ))}
-
-            {/* =================================================
-                ACTION
-            ================================================= */}
-
-            <CompareLabel label="Action" />
-
-            {compareItems.map((product) => {
-              const productId = product.id || product._id;
-
-              const isOutOfStock = Number(product.stock) <= 0;
-
-              return (
-                <div key={`action-${productId}`} className="p-5">
                   <Button
                     size="medium"
-                    className="w-full"
-                    disabled={isOutOfStock}
-                    onClick={() => handleAddToCart(product)}
+                    className="mt-4 w-full"
+                    disabled={isOutOfStock || cartActionLoading}
+                    onClick={() => handleAddToCart(item)}
                   >
                     <ShoppingCart size={17} />
 
-                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                    {isOutOfStock
+                      ? "Out of Stock"
+                      : cartActionLoading
+                        ? "Adding..."
+                        : "Add to Cart"}
                   </Button>
                 </div>
-              );
-            })}
-          </div>
+              </article>
+            );
+          })}
         </div>
 
         {/* =================================================
-            FOOTER ACTION
+            BACK TO PRODUCTS
         ================================================= */}
 
-        <div className="mt-8">
+        <div className="mt-8 flex flex-wrap gap-3">
           <Button variant="outlined" onClick={() => navigate("/products")}>
             <ArrowLeft size={17} />
             Continue Shopping
@@ -417,30 +600,6 @@ function Compare() {
         </div>
       </div>
     </main>
-  );
-}
-
-/* =========================================================
-   COMPARISON LABEL
-========================================================= */
-
-function CompareLabel({ label }) {
-  return (
-    <div className="border-b border-r border-outline-variant bg-surface-container p-5">
-      <p className="text-sm font-semibold text-text">{label}</p>
-    </div>
-  );
-}
-
-/* =========================================================
-   COMPARISON VALUE
-========================================================= */
-
-function CompareValue({ value }) {
-  return (
-    <div className="border-b border-outline-variant p-5">
-      <p className="text-sm text-text">{value || "—"}</p>
-    </div>
   );
 }
 

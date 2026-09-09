@@ -1,4 +1,5 @@
-import { Heart, ShoppingCart, Trash2, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Heart, ShoppingCart, Trash2 } from "lucide-react";
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
@@ -6,11 +7,12 @@ import Button from "../../components/ui/Button";
 import IconButton from "../../components/ui/IconButton";
 
 import {
-  removeFromWishlist,
-  clearWishlist,
+  fetchWishlist,
+  removeProductFromWishlist,
+  clearWishlistFromBackend,
 } from "../../store/slices/wishlistSlice";
 
-import { addToCart } from "../../store/slices/cartSlice";
+import { addProductToCart } from "../../store/slices/cartSlice";
 
 import { formatCurrency } from "../../utils/currency";
 
@@ -18,27 +20,176 @@ function Wishlist() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const wishlistItems = useSelector((state) => state.wishlist.items);
+  /* =====================================================
+     WISHLIST STATE
+  ===================================================== */
+
+  const wishlistItems = useSelector((state) => state.wishlist?.items || []);
+
+  const wishlistLoading = useSelector(
+    (state) => state.wishlist?.loading ?? false,
+  );
+
+  const wishlistActionLoading = useSelector(
+    (state) => state.wishlist?.actionLoading ?? false,
+  );
+
+  const wishlistError = useSelector((state) => state.wishlist?.error ?? null);
+
+  /* =====================================================
+     CART STATE
+  ===================================================== */
+
+  const cartActionLoading = useSelector(
+    (state) => state.cart?.actionLoading ?? false,
+  );
+
+  /* =====================================================
+     FETCH WISHLIST
+
+     Redux state is reset when the browser refreshes.
+     Therefore the wishlist must be loaded again
+     from the backend.
+  ===================================================== */
+
+  useEffect(() => {
+    dispatch(fetchWishlist());
+  }, [dispatch]);
 
   /* =====================================================
      ADD TO CART
   ===================================================== */
 
-  const handleAddToCart = (item) => {
-    if (Number(item.stock) <= 0) {
+  const handleAddToCart = async (item) => {
+    const productId = item?.id || item?._id;
+
+    if (!productId) {
+      console.error("Cannot add wishlist item to cart: product ID is missing.");
+
       return;
     }
 
-    dispatch(
-      addToCart({
-        id: item.id || item._id,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        quantity: 1,
-      }),
-    );
+    if (Number(item?.stock ?? 0) <= 0) {
+      return;
+    }
+
+    if (cartActionLoading) {
+      return;
+    }
+
+    try {
+      await dispatch(
+        addProductToCart({
+          productId,
+          quantity: 1,
+        }),
+      ).unwrap();
+
+      console.log(`Added "${item?.name}" to cart successfully.`);
+    } catch (error) {
+      console.error("Failed to add wishlist item to cart:", error);
+    }
   };
+
+  /* =====================================================
+     REMOVE FROM WISHLIST
+
+     Backend:
+     DELETE /api/wishlist/:productId
+  ===================================================== */
+
+  const handleRemoveFromWishlist = async (productId) => {
+    if (!productId || wishlistActionLoading) {
+      return;
+    }
+
+    try {
+      await dispatch(removeProductFromWishlist(productId)).unwrap();
+
+      console.log("Product removed from wishlist successfully.");
+    } catch (error) {
+      console.error("Failed to remove product from wishlist:", error);
+    }
+  };
+
+  /* =====================================================
+     CLEAR WISHLIST
+
+     Backend:
+     DELETE /api/wishlist
+  ===================================================== */
+
+  const handleClearWishlist = async () => {
+    if (wishlistItems.length === 0 || wishlistActionLoading) {
+      return;
+    }
+
+    try {
+      await dispatch(clearWishlistFromBackend()).unwrap();
+
+      console.log("Wishlist cleared successfully.");
+    } catch (error) {
+      console.error("Failed to clear wishlist:", error);
+    }
+  };
+
+  /* =====================================================
+     LOADING
+  ===================================================== */
+
+  if (wishlistLoading) {
+    return (
+      <main className="min-h-screen bg-background py-12 sm:py-16">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <div className="rounded-3xl border border-outline-variant bg-surface p-10 text-center shadow-sm sm:p-14">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-container text-primary">
+              <Heart size={28} className="animate-pulse" />
+            </div>
+
+            <h1 className="mt-5 text-2xl font-semibold text-text">
+              Loading wishlist...
+            </h1>
+
+            <p className="mt-2 text-sm text-text-secondary">
+              Please wait while we load your saved products.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  /* =====================================================
+     ERROR
+  ===================================================== */
+
+  if (wishlistError && wishlistItems.length === 0) {
+    return (
+      <main className="min-h-screen bg-background py-12 sm:py-16">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <div className="rounded-3xl border border-outline-variant bg-surface p-10 text-center shadow-sm sm:p-14">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-container text-primary">
+              <Heart size={28} />
+            </div>
+
+            <h1 className="mt-5 text-2xl font-semibold text-text">
+              Unable to load wishlist
+            </h1>
+
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">
+              {wishlistError}
+            </p>
+
+            <div className="mt-6 flex justify-center">
+              <Button size="large" onClick={() => dispatch(fetchWishlist())}>
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   /* =====================================================
      EMPTY WISHLIST
@@ -50,11 +201,13 @@ function Wishlist() {
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-outline-variant bg-surface p-10 text-center shadow-sm sm:p-14">
             {/* Icon */}
+
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-container text-primary">
               <Heart size={28} />
             </div>
 
             {/* Heading */}
+
             <h1 className="mt-5 text-2xl font-semibold text-text">
               Your wishlist is empty
             </h1>
@@ -65,6 +218,7 @@ function Wishlist() {
             </p>
 
             {/* Button */}
+
             <div className="mt-6 flex justify-center">
               <Button size="large" onClick={() => navigate("/products")}>
                 <ShoppingCart size={18} />
@@ -125,15 +279,28 @@ function Wishlist() {
           </div>
 
           {/* Clear wishlist */}
+
           <Button
             variant="text"
             size="small"
-            onClick={() => dispatch(clearWishlist())}
+            onClick={handleClearWishlist}
+            disabled={wishlistActionLoading}
           >
             <Trash2 size={16} />
-            Clear wishlist
+
+            {wishlistActionLoading ? "Clearing..." : "Clear wishlist"}
           </Button>
         </div>
+
+        {/* =================================================
+            WISHLIST ERROR
+        ================================================= */}
+
+        {wishlistError && (
+          <div className="mb-6 rounded-xl border border-error/20 bg-error/5 px-4 py-3">
+            <p className="text-sm font-medium text-error">{wishlistError}</p>
+          </div>
+        )}
 
         {/* =================================================
             WISHLIST GRID
@@ -141,34 +308,64 @@ function Wishlist() {
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {wishlistItems.map((item) => {
-            const productId = item.id || item._id;
-            const isOutOfStock = Number(item.stock) <= 0;
+            const productId = item?.id || item?._id;
+
+            const isOutOfStock = Number(item?.stock ?? 0) <= 0;
+
+            /*
+             * Support:
+             *
+             * image: "..."
+             *
+             * images: [
+             *   {
+             *     url: "..."
+             *   }
+             * ]
+             */
+
+            const productImage =
+              item?.images?.[0]?.url ||
+              (typeof item?.images?.[0] === "string" ? item.images[0] : null) ||
+              item?.image ||
+              "";
 
             return (
               <article
                 key={productId}
                 className="group overflow-hidden rounded-3xl border border-outline-variant bg-surface shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
-                {/* Product image */}
+                {/* =================================================
+                    PRODUCT IMAGE
+                ================================================= */}
+
                 <div className="relative aspect-square overflow-hidden bg-surface-container">
                   <button
                     type="button"
                     onClick={() => navigate(`/products/${productId}`)}
                     className="h-full w-full"
                   >
-                    <img
-                      src={item.image}
-                      alt={item.name}
-                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                    />
+                    {productImage ? (
+                      <img
+                        src={productImage}
+                        alt={item?.name || "Product"}
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm text-text-secondary">
+                        No image available
+                      </div>
+                    )}
                   </button>
 
                   {/* Remove wishlist */}
+
                   <IconButton
-                    label={`Remove ${item.name} from wishlist`}
+                    label={`Remove ${item?.name || "product"} from wishlist`}
                     size="medium"
                     variant="standard"
-                    onClick={() => dispatch(removeFromWishlist(productId))}
+                    onClick={() => handleRemoveFromWishlist(productId)}
+                    disabled={wishlistActionLoading}
                     className="absolute right-3 top-3 bg-surface/90 backdrop-blur"
                   >
                     <Heart
@@ -179,6 +376,7 @@ function Wishlist() {
                   </IconButton>
 
                   {/* Out of stock */}
+
                   {isOutOfStock && (
                     <span className="absolute bottom-3 left-3 rounded-full bg-error px-3 py-1 text-xs font-semibold text-white">
                       Out of stock
@@ -186,58 +384,79 @@ function Wishlist() {
                   )}
                 </div>
 
-                {/* Product content */}
+                {/* =================================================
+                    PRODUCT CONTENT
+                ================================================= */}
+
                 <div className="p-5">
                   {/* Category */}
-                  {item.categoryLabel && (
+
+                  {item?.categoryLabel && (
                     <p className="text-xs font-medium text-primary">
                       {item.categoryLabel}
                     </p>
                   )}
 
                   {/* Product name */}
+
                   <button
                     type="button"
                     onClick={() => navigate(`/products/${productId}`)}
                     className="mt-1 block text-left"
                   >
                     <h2 className="line-clamp-2 text-base font-semibold text-text transition hover:text-primary">
-                      {item.name}
+                      {item?.name}
                     </h2>
                   </button>
 
                   {/* Rating */}
-                  {item.rating && (
+
+                  {item?.rating !== undefined && item?.rating !== null && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-sm font-medium text-text">
                         ★ {item.rating}
                       </span>
 
-                      {item.reviewCount && (
-                        <span className="text-xs text-text-secondary">
-                          ({item.reviewCount})
-                        </span>
-                      )}
+                      {item?.reviewCount !== undefined &&
+                        item?.reviewCount !== null && (
+                          <span className="text-xs text-text-secondary">
+                            ({item.reviewCount})
+                          </span>
+                        )}
                     </div>
                   )}
 
                   {/* Price */}
+
                   <div className="mt-3">
                     <span className="text-lg font-bold text-text">
-                      {formatCurrency(item.price)}
+                      {formatCurrency(item?.price)}
                     </span>
+
+                    {item?.oldPrice && (
+                      <span className="ml-2 text-xs text-text-secondary line-through">
+                        {formatCurrency(item.oldPrice)}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Add to cart */}
+                  {/* =================================================
+                      ADD TO CART
+                  ================================================= */}
+
                   <Button
                     size="medium"
                     className="mt-4 w-full"
-                    disabled={isOutOfStock}
+                    disabled={isOutOfStock || cartActionLoading}
                     onClick={() => handleAddToCart(item)}
                   >
                     <ShoppingCart size={17} />
 
-                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                    {isOutOfStock
+                      ? "Out of Stock"
+                      : cartActionLoading
+                        ? "Adding..."
+                        : "Add to Cart"}
                   </Button>
                 </div>
               </article>

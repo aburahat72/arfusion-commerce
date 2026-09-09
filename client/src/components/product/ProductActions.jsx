@@ -10,9 +10,14 @@ import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
-import { addToCart } from "../../store/slices/cartSlice";
+import { addProductToCart } from "../../store/slices/cartSlice";
 import { startBuyNow } from "../../store/slices/checkoutSlice";
-import { toggleWishlist } from "../../store/slices/wishlistSlice";
+
+import {
+  addProductToWishlist,
+  removeProductFromWishlist,
+} from "../../store/slices/wishlistSlice";
+
 import { toggleCompare } from "../../store/slices/compareSlice";
 
 import Button from "../ui/Button";
@@ -23,19 +28,20 @@ function ProductActions({ product }) {
   const navigate = useNavigate();
 
   const [quantity, setQuantity] = useState(1);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   /* =====================================================
      REAL PRODUCT ID
   ===================================================== */
 
-  const productId = product._id || product.id;
+  const productId = product?._id || product?.id;
 
   /* =====================================================
      REAL PRODUCT IMAGE
   ===================================================== */
 
   /*
-   * MongoDB product uses:
+   * MongoDB product:
    *
    * images: [
    *   {
@@ -44,20 +50,20 @@ function ProductActions({ product }) {
    *   }
    * ]
    *
-   * Keep fallback support for old static products.
+   * Also support older/static product formats.
    */
 
   const productImage =
-    product.images?.[0]?.url ||
-    product.images?.[0] ||
-    product.image ||
+    product?.images?.[0]?.url ||
+    (typeof product?.images?.[0] === "string" ? product.images[0] : null) ||
+    product?.image ||
     "";
 
   /* =====================================================
      STOCK
   ===================================================== */
 
-  const stock = Number(product.stock ?? 0);
+  const stock = Number(product?.stock ?? 0);
 
   const isOutOfStock = stock <= 0;
 
@@ -66,31 +72,45 @@ function ProductActions({ product }) {
   ===================================================== */
 
   const categoryName =
-    typeof product.category === "object"
+    typeof product?.category === "object"
       ? product.category?.name
-      : product.categoryLabel || product.category;
+      : product?.categoryLabel || product?.category || "";
 
   /* =====================================================
      WISHLIST STATE
   ===================================================== */
 
-  const isWishlisted = useSelector((state) =>
-    state.wishlist.items.some(
-      (item) => String(item.id || item._id) === String(productId),
-    ),
+  const wishlistItems = useSelector((state) => state.wishlist?.items || []);
+
+  const wishlistActionLoading = useSelector(
+    (state) => state.wishlist?.actionLoading ?? false,
+  );
+
+  const wishlistError = useSelector((state) => state.wishlist?.error ?? null);
+
+  const isWishlisted = wishlistItems.some(
+    (item) => String(item?.id || item?._id) === String(productId),
   );
 
   /* =====================================================
      COMPARE STATE
   ===================================================== */
 
-  const compareItems = useSelector((state) => state.compare.items);
+  const compareItems = useSelector((state) => state.compare?.items || []);
 
   const isCompared = compareItems.some(
-    (item) => String(item.id || item._id) === String(productId),
+    (item) => String(item?.id || item?._id) === String(productId),
   );
 
   const compareLimitReached = compareItems.length >= 4 && !isCompared;
+
+  /* =====================================================
+     CART STATE
+  ===================================================== */
+
+  const cartActionLoading = useSelector(
+    (state) => state.cart?.actionLoading ?? false,
+  );
 
   /* =====================================================
      QUANTITY
@@ -110,24 +130,27 @@ function ProductActions({ product }) {
      ADD TO CART
   ===================================================== */
 
-  const handleAddToCart = () => {
-    if (isOutOfStock) {
+  const handleAddToCart = async () => {
+    if (!productId || isOutOfStock) {
       return;
     }
 
-    dispatch(
-      addToCart({
-        id: productId,
-        _id: productId,
-        name: product.name,
-        price: product.price,
-        image: productImage,
-        images: product.images || [],
-        quantity,
-        stock,
-        category: categoryName,
-      }),
-    );
+    if (cartActionLoading) {
+      return;
+    }
+
+    try {
+      await dispatch(
+        addProductToCart({
+          productId,
+          quantity,
+        }),
+      ).unwrap();
+
+      console.log(`Added "${product?.name}" to cart successfully.`);
+    } catch (error) {
+      console.error("Failed to add product to cart:", error);
+    }
   };
 
   /* =====================================================
@@ -135,7 +158,7 @@ function ProductActions({ product }) {
   ===================================================== */
 
   const handleBuyNow = () => {
-    if (isOutOfStock) {
+    if (!productId || isOutOfStock) {
       return;
     }
 
@@ -143,10 +166,10 @@ function ProductActions({ product }) {
       startBuyNow({
         id: productId,
         _id: productId,
-        name: product.name,
-        price: product.price,
+        name: product?.name,
+        price: product?.price,
         image: productImage,
-        images: product.images || [],
+        images: product?.images || [],
         quantity,
         stock,
         category: categoryName,
@@ -157,28 +180,84 @@ function ProductActions({ product }) {
   };
 
   /* =====================================================
-     WISHLIST
+     WISHLIST PRODUCT OBJECT
+
+     This is only used to keep the complete product
+     available in Redux after the backend succeeds.
+
+     The backend remains the source of truth.
   ===================================================== */
 
-  const handleWishlist = () => {
-    dispatch(
-      toggleWishlist({
-        id: productId,
-        _id: productId,
-        name: product.name,
-        price: product.price,
-        image: productImage,
-        images: product.images || [],
-        category: categoryName,
-        categoryLabel: categoryName,
-        rating: product.rating,
-        reviewCount: product.reviewCount,
-        stock,
-        brand: product.brand,
-        sku: product.sku,
-        description: product.description,
-      }),
-    );
+  const wishlistProduct = {
+    id: productId,
+    _id: productId,
+    name: product?.name,
+    price: product?.price,
+    image: productImage,
+    images: product?.images || [],
+    category: categoryName,
+    categoryLabel: categoryName,
+    rating: product?.rating,
+    reviewCount: product?.reviewCount,
+    stock,
+    brand: product?.brand,
+    oldPrice: product?.oldPrice,
+    discount: product?.discount,
+    sku: product?.sku,
+    description: product?.description,
+  };
+
+  /* =====================================================
+     WISHLIST
+
+     ADD:
+     POST /api/wishlist
+
+     REMOVE:
+     DELETE /api/wishlist/:productId
+  ===================================================== */
+
+  const handleWishlist = async () => {
+    if (!productId || wishlistLoading) {
+      return;
+    }
+
+    if (wishlistActionLoading) {
+      return;
+    }
+
+    setWishlistLoading(true);
+
+    try {
+      /* =================================================
+         REMOVE
+      ================================================= */
+
+      if (isWishlisted) {
+        await dispatch(removeProductFromWishlist(productId)).unwrap();
+
+        console.log("Product removed from wishlist successfully.");
+
+        return;
+      }
+
+      /* =================================================
+         ADD
+      ================================================= */
+
+      await dispatch(
+        addProductToWishlist({
+          productId,
+          product: wishlistProduct,
+        }),
+      ).unwrap();
+
+      console.log("Product added to wishlist successfully.");
+    } catch (error) {
+      console.error("Wishlist operation failed:", error);
+    } finally {
+      setWishlistLoading(false);
+    }
   };
 
   /* =====================================================
@@ -186,7 +265,7 @@ function ProductActions({ product }) {
   ===================================================== */
 
   const handleCompare = () => {
-    if (compareLimitReached) {
+    if (!productId || compareLimitReached) {
       return;
     }
 
@@ -194,23 +273,27 @@ function ProductActions({ product }) {
       toggleCompare({
         id: productId,
         _id: productId,
-        name: product.name,
-        price: product.price,
+        name: product?.name,
+        price: product?.price,
         image: productImage,
-        images: product.images || [],
+        images: product?.images || [],
         category: categoryName,
         categoryLabel: categoryName,
-        rating: product.rating,
-        reviewCount: product.reviewCount,
+        rating: product?.rating,
+        reviewCount: product?.reviewCount,
         stock,
-        brand: product.brand,
-        oldPrice: product.oldPrice,
-        discount: product.discount,
-        description: product.description,
-        sku: product.sku,
+        brand: product?.brand,
+        oldPrice: product?.oldPrice,
+        discount: product?.discount,
+        description: product?.description,
+        sku: product?.sku,
       }),
     );
   };
+
+  /* =====================================================
+     RENDER
+  ===================================================== */
 
   return (
     <div className="space-y-4 border-t border-outline-variant pt-6">
@@ -267,9 +350,14 @@ function ProductActions({ product }) {
       <div className="grid gap-3 sm:grid-cols-2">
         {/* Add to Cart */}
 
-        <Button size="large" disabled={isOutOfStock} onClick={handleAddToCart}>
+        <Button
+          size="large"
+          disabled={isOutOfStock || cartActionLoading}
+          onClick={handleAddToCart}
+        >
           <ShoppingCart size={18} />
-          Add to Cart
+
+          {cartActionLoading ? "Adding..." : "Add to Cart"}
         </Button>
 
         {/* Buy Now */}
@@ -287,7 +375,7 @@ function ProductActions({ product }) {
 
       {/* =================================================
           SECONDARY ACTIONS
-      ================================================= */}
+      ===================================================== */}
 
       <div className="grid grid-cols-2 gap-3">
         {/* Wishlist */}
@@ -296,11 +384,16 @@ function ProductActions({ product }) {
           size="medium"
           variant={isWishlisted ? "tonal" : "outlined"}
           onClick={handleWishlist}
+          disabled={!productId || wishlistLoading || wishlistActionLoading}
           aria-pressed={isWishlisted}
         >
           <Heart size={18} fill={isWishlisted ? "currentColor" : "none"} />
 
-          {isWishlisted ? "Wishlisted" : "Wishlist"}
+          {wishlistLoading || wishlistActionLoading
+            ? "Updating..."
+            : isWishlisted
+              ? "Wishlisted"
+              : "Wishlist"}
         </Button>
 
         {/* Compare */}
@@ -312,9 +405,7 @@ function ProductActions({ product }) {
           disabled={compareLimitReached}
           aria-pressed={isCompared}
           title={
-            compareLimitReached
-              ? "You can compare up to 4 products"
-              : undefined
+            compareLimitReached ? "You can compare up to 4 products" : undefined
           }
         >
           <GitCompareArrows size={18} />
@@ -328,8 +419,16 @@ function ProductActions({ product }) {
       </div>
 
       {/* =================================================
+          WISHLIST ERROR
+      ===================================================== */}
+
+      {wishlistError && (
+        <p className="text-xs font-medium text-error">{wishlistError}</p>
+      )}
+
+      {/* =================================================
           DELIVERY INFORMATION
-      ================================================= */}
+      ===================================================== */}
 
       <div className="rounded-2xl bg-surface-container p-4">
         <div className="space-y-2 text-sm">
@@ -345,4 +444,3 @@ function ProductActions({ product }) {
 }
 
 export default ProductActions;
-
