@@ -17,6 +17,7 @@ import Products from "../pages/Products/Products";
 import ProductDetails from "../pages/Products/ProductDetails";
 import Cart from "../pages/Cart/Cart";
 import Checkout from "../pages/Checkout/Checkout";
+import Payment from "../pages/Payment/Payment";
 import OrderSuccess from "../pages/OrderSuccess/OrderSuccess";
 import Wishlist from "../pages/Wishlist/Wishlist";
 import Compare from "../pages/Compare/Compare";
@@ -200,6 +201,10 @@ function AppRoutes() {
             <Route path="/profile/settings" element={<Settings />} />
 
             <Route path="/checkout" element={<Checkout />} />
+
+            {/* COMPLETE PAYMENT METHOD PAGE */}
+
+            <Route path="/payment" element={<Payment />} />
 
             <Route path="/order-success" element={<OrderSuccess />} />
           </Route>

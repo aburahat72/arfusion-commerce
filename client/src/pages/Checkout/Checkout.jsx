@@ -1,18 +1,16 @@
-import { useState } from "react";
-import { Banknote, CreditCard, Lock, ShoppingBag, Truck } from "lucide-react";
-import { useDispatch, useSelector } from "react-redux";
+import { useEffect, useState } from "react";
+import { Lock, ShoppingBag, Truck, Check } from "lucide-react";
+import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import Button from "../../components/ui/Button";
 
-import { removePurchasedItems } from "../../store/slices/cartSlice";
-import { clearCheckout } from "../../store/slices/checkoutSlice";
-
 import { formatCurrency } from "../../utils/currency";
 import { calculateOrderSummary } from "../../utils/orderSummary";
 
+import { getAddresses, addAddress } from "../../services/addressService";
+
 function Checkout() {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
 
   /*
@@ -61,10 +59,130 @@ function Checkout() {
     state: "",
     pinCode: "",
     phone: "",
-    paymentMethod: "",
   });
 
   const [errors, setErrors] = useState({});
+
+  /*
+   * =========================
+   * SAVED ADDRESS STATE
+   * =========================
+   */
+
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  /*
+   * =========================
+   * FILL FORM FROM ADDRESS
+   * =========================
+   */
+
+  const fillFormFromAddress = (address) => {
+    const fullName = (address.fullName || "").trim();
+
+    const nameParts = fullName ? fullName.split(/\s+/) : [];
+
+    const firstName = nameParts.shift() || "";
+    const lastName = nameParts.join(" ");
+
+    setFormData({
+      firstName,
+      lastName,
+      address: address.addressLine || "",
+      city: address.city || "",
+      state: address.state || "",
+      pinCode: address.postalCode || "",
+      phone: address.phone || "",
+    });
+
+    setErrors({});
+  };
+
+  /*
+   * =========================
+   * LOAD SAVED ADDRESSES
+   * =========================
+   */
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadAddresses = async () => {
+      try {
+        setLoadingAddresses(true);
+
+        const response = await getAddresses();
+
+        if (!mounted) {
+          return;
+        }
+
+        const addresses = response?.addresses || [];
+
+        setSavedAddresses(addresses);
+
+        /*
+         * Automatically select the backend
+         * default address when available.
+         */
+        const defaultAddress = addresses.find((address) => address.isDefault);
+
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress._id);
+          fillFormFromAddress(defaultAddress);
+        }
+      } catch (error) {
+        console.error("Failed to load saved addresses:", error);
+      } finally {
+        if (mounted) {
+          setLoadingAddresses(false);
+        }
+      }
+    };
+
+    loadAddresses();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*
+   * =========================
+   * SELECT SAVED ADDRESS
+   * =========================
+   */
+
+  const handleSelectAddress = (address) => {
+    setSelectedAddressId(address._id);
+
+    fillFormFromAddress(address);
+  };
+
+  /*
+   * =========================
+   * USE NEW ADDRESS
+   * =========================
+   */
+
+  const handleUseNewAddress = () => {
+    setSelectedAddressId("");
+
+    setFormData({
+      firstName: "",
+      lastName: "",
+      address: "",
+      city: "",
+      state: "",
+      pinCode: "",
+      phone: "",
+    });
+
+    setErrors({});
+  };
 
   /*
    * =========================
@@ -137,11 +255,6 @@ function Checkout() {
       newErrors.phone = "Enter a valid 10-digit Indian phone number";
     }
 
-    // Payment
-    if (!formData.paymentMethod) {
-      newErrors.paymentMethod = "Select a payment method";
-    }
-
     setErrors(newErrors);
 
     return Object.keys(newErrors).length === 0;
@@ -149,84 +262,138 @@ function Checkout() {
 
   /*
    * =========================
-   * PLACE ORDER
+   * SAVE ADDRESS
    * =========================
    */
 
-  const handlePlaceOrder = (event) => {
+  const saveCurrentAddress = async () => {
+    /*
+     * If an existing saved address is selected,
+     * it does not need to be created again.
+     */
+    if (selectedAddressId) {
+      return null;
+    }
+
+    const fullName = [formData.firstName.trim(), formData.lastName.trim()]
+      .filter(Boolean)
+      .join(" ");
+
+    const addressData = {
+      fullName,
+      phone: formData.phone.trim(),
+      addressLine: formData.address.trim(),
+      city: formData.city.trim(),
+      state: formData.state.trim(),
+      postalCode: formData.pinCode.trim(),
+      country: "India",
+
+      /*
+       * If this is the first address,
+       * automatically make it default.
+       */
+      isDefault: savedAddresses.length === 0,
+    };
+
+    const response = await addAddress(addressData);
+
+    const newAddress = response?.address;
+
+    if (newAddress) {
+      setSavedAddresses((current) => [newAddress, ...current]);
+
+      setSelectedAddressId(newAddress._id);
+
+      return newAddress;
+    }
+
+    return null;
+  };
+
+  /*
+   * =========================
+   * CONTINUE TO PAYMENT
+   * =========================
+   */
+
+  const handleContinue = async (event) => {
     event.preventDefault();
 
-    // Validate everything first
+    /*
+     * Prevent duplicate checkout submissions.
+     */
+    if (savingAddress) {
+      return;
+    }
+
+    /*
+     * Validate delivery information before continuing.
+     */
     const isValid = validateForm();
 
     if (!isValid) {
       return;
     }
 
-    /*
-     * Get IDs of products that are
-     * actually being purchased.
-     */
-    const purchasedItemIds = itemsToCheckout.map((item) => item.id);
+    try {
+      setSavingAddress(true);
 
-    /*
-     * Create order object.
-     *
-     * Currently this is frontend-only.
-     * Later send this object to your backend API.
-     */
-    const orderData = {
-      customer: {
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        address: formData.address.trim(),
-        city: formData.city.trim(),
-        state: formData.state.trim(),
-        pinCode: formData.pinCode,
-        phone: formData.phone,
-      },
+      /*
+       * Save the address to backend if this
+       * is a newly entered address.
+       */
+      await saveCurrentAddress();
 
-      paymentMethod: formData.paymentMethod,
+      /*
+       * Build the shipping address that will be
+       * submitted with the payment/order process.
+       */
+      const shippingAddress = [
+        formData.firstName.trim(),
+        formData.lastName.trim(),
+        formData.address.trim(),
+        formData.city.trim(),
+        formData.state.trim(),
+        formData.pinCode.trim(),
+        formData.phone.trim(),
+      ].join(", ");
 
-      items: itemsToCheckout,
+      /*
+       * Send the actual products and quantities
+       * to the Payment page.
+       *
+       * The backend will calculate the real prices
+       * from the database.
+       */
+      const items = itemsToCheckout.map((item) => ({
+        product: item.id,
+        quantity: item.quantity,
+      }));
 
-      subtotal,
-      shipping,
-      discount,
-      total,
+      /*
+       * Move to the complete Payment Method page.
+       */
+      navigate("/payment", {
+        state: {
+          shippingAddress,
+          items,
+          checkoutMode: isBuyNow ? "buyNow" : "cart",
+        },
+      });
+    } catch (error) {
+      console.error("Failed to save address:", error);
 
-      checkoutMode: isBuyNow ? "buyNow" : "cart",
-    };
+      const message =
+        error?.response?.data?.message ||
+        "Unable to save your address. Please try again.";
 
-    /*
-     * TEMPORARY FRONTEND TEST
-     *
-     * Later replace this with your API request.
-     */
-    console.log("Order placed:", orderData);
-
-    /*
-     * IMPORTANT:
-     *
-     * Only remove purchased products AFTER
-     * the order is considered successful.
-     *
-     * This also handles Buy Now:
-     *
-     * If the product already exists in the cart,
-     * it will now be removed.
-     */
-    dispatch(removePurchasedItems(purchasedItemIds));
-
-    /*
-     * Clear temporary checkout state.
-     */
-    dispatch(clearCheckout());
-
-    /*
-     * Redirect to order success page.
-     */
-    navigate("/order-success");
+      setErrors((current) => ({
+        ...current,
+        address: message,
+      }));
+    } finally {
+      setSavingAddress(false);
+    }
   };
 
   /*
@@ -310,7 +477,7 @@ function Checkout() {
         </div>
 
         <form
-          onSubmit={handlePlaceOrder}
+          onSubmit={handleContinue}
           noValidate
           className="grid gap-6 lg:grid-cols-[1fr_380px]"
         >
@@ -319,7 +486,96 @@ function Checkout() {
           ========================================== */}
 
           <section className="space-y-6">
-            {/* Delivery Information */}
+            {/* =========================================
+                SAVED ADDRESSES
+            ========================================== */}
+
+            {!loadingAddresses && savedAddresses.length > 0 && (
+              <div className="rounded-3xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-text">
+                      Saved Addresses
+                    </h2>
+
+                    <p className="mt-1 text-xs text-text-secondary">
+                      Select an address for delivery.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleUseNewAddress}
+                    className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                      selectedAddressId === ""
+                        ? "border-primary bg-primary-container text-primary"
+                        : "border-outline-variant text-text hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    Use New Address
+                  </button>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  {savedAddresses.map((address) => {
+                    const isSelected = selectedAddressId === address._id;
+
+                    return (
+                      <button
+                        key={address._id}
+                        type="button"
+                        onClick={() => handleSelectAddress(address)}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          isSelected
+                            ? "border-primary bg-primary-container/40"
+                            : "border-outline-variant hover:border-primary/60"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                              isSelected
+                                ? "border-primary bg-primary text-white"
+                                : "border-outline"
+                            }`}
+                          >
+                            {isSelected && <Check size={13} />}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-text">
+                                {address.fullName}
+                              </p>
+
+                              {address.isDefault && (
+                                <span className="rounded-full bg-primary-container px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="mt-1 text-xs text-text-secondary">
+                              {address.phone}
+                            </p>
+
+                            <p className="mt-2 text-sm leading-5 text-text-secondary">
+                              {address.addressLine}, {address.city},{" "}
+                              {address.state} - {address.postalCode}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* =========================================
+                DELIVERY INFORMATION
+            ========================================== */}
+
             <div className="rounded-3xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-primary">
@@ -548,96 +804,6 @@ function Checkout() {
                 </div>
               </div>
             </div>
-
-            {/* =========================================
-                PAYMENT
-            ========================================== */}
-
-            <div className="rounded-3xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container text-primary">
-                  <CreditCard size={19} />
-                </div>
-
-                <div>
-                  <h2 className="text-lg font-semibold text-text">
-                    Payment Method
-                  </h2>
-
-                  <p className="text-xs text-text-secondary">
-                    Select your preferred payment method.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-3">
-                {/* Online Payment */}
-                <label
-                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
-                    formData.paymentMethod === "online"
-                      ? "border-primary bg-primary-container/30"
-                      : "border-outline-variant hover:border-primary/40"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="online"
-                    checked={formData.paymentMethod === "online"}
-                    onChange={handleChange}
-                    className="h-4 w-4 accent-primary"
-                  />
-
-                  <CreditCard size={20} className="text-primary" />
-
-                  <div>
-                    <p className="text-sm font-semibold text-text">
-                      Online Payment
-                    </p>
-
-                    <p className="mt-1 text-xs text-text-secondary">
-                      UPI, debit card, credit card and net banking
-                    </p>
-                  </div>
-                </label>
-
-                {/* Cash on Delivery */}
-                <label
-                  className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition ${
-                    formData.paymentMethod === "cod"
-                      ? "border-primary bg-primary-container/30"
-                      : "border-outline-variant hover:border-primary/40"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="cod"
-                    checked={formData.paymentMethod === "cod"}
-                    onChange={handleChange}
-                    className="h-4 w-4 accent-primary"
-                  />
-
-                  <Banknote size={20} className="text-primary" />
-
-                  <div>
-                    <p className="text-sm font-semibold text-text">
-                      Cash on Delivery
-                    </p>
-
-                    <p className="mt-1 text-xs text-text-secondary">
-                      Pay when your order is delivered
-                    </p>
-                  </div>
-                </label>
-              </div>
-
-              {errors.paymentMethod && (
-                <p className="mt-2 text-xs text-error">
-                  {errors.paymentMethod}
-                </p>
-              )}
-            </div>
           </section>
 
           {/* =========================================
@@ -724,11 +890,14 @@ function Checkout() {
               </div>
             </div>
 
-            {/* Place Order */}
-            <Button type="submit" size="large" className="mt-6 w-full">
-              {formData.paymentMethod === "cod"
-                ? "Place COD Order"
-                : "Place Order"}
+            {/* Continue */}
+            <Button
+              type="submit"
+              size="large"
+              className="mt-6 w-full"
+              disabled={savingAddress}
+            >
+              {savingAddress ? "Saving Address..." : "Continue"}
             </Button>
 
             {/* Security */}
