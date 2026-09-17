@@ -30,6 +30,7 @@ import Profile from "../pages/Profile/Profile";
 import PersonalInformation from "../pages/PersonalInformation/PersonalInformation";
 import Addresses from "../pages/Addresses/Addresses";
 import Orders from "../pages/Orders/Orders";
+import OrderDetails from "../pages/Orders/OrderDetails";
 import Settings from "../pages/Settings/Settings";
 
 // =====================================================
@@ -197,6 +198,13 @@ function AppRoutes() {
             <Route path="/profile/addresses" element={<Addresses />} />
 
             <Route path="/profile/orders" element={<Orders />} />
+
+            {/* CUSTOMER ORDER DETAILS */}
+
+            <Route
+              path="/profile/orders/:orderId"
+              element={<OrderDetails />}
+            />
 
             <Route path="/profile/settings" element={<Settings />} />
 

@@ -1,15 +1,46 @@
 import { ArrowLeft, Save } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useAuth } from "../../context/AuthContext";
 import { getProfile, saveProfile } from "../../utils/profileStorage";
 
 function PersonalInformation() {
   const navigate = useNavigate();
 
-  const [profile, setProfile] = useState(getProfile());
+  const { user } = useAuth();
+
+  const [profile, setProfile] = useState(() => {
+    const storedProfile = getProfile();
+
+    return {
+      ...storedProfile,
+      name: user?.fullName || storedProfile?.name || "",
+      email: user?.email || storedProfile?.email || "",
+      phone: user?.phone || storedProfile?.phone || "",
+    };
+  });
 
   const [saved, setSaved] = useState(false);
+
+  // =====================================================
+  // SYNC AUTHENTICATED USER INFORMATION
+  // =====================================================
+
+  useEffect(() => {
+    if (!user) return;
+
+    setProfile((current) => ({
+      ...current,
+      name: user.fullName || current.name || "",
+      email: user.email || current.email || "",
+      phone: user.phone || current.phone || "",
+    }));
+  }, [user]);
+
+  // =====================================================
+  // HANDLE FIELD CHANGE
+  // =====================================================
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -21,6 +52,10 @@ function PersonalInformation() {
 
     setSaved(false);
   };
+
+  // =====================================================
+  // SAVE PROFILE
+  // =====================================================
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -113,6 +148,10 @@ function PersonalInformation() {
     </main>
   );
 }
+
+/* =====================================================
+   FIELD
+===================================================== */
 
 function Field({
   label,

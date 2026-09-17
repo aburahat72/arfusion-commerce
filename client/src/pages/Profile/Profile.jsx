@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   ChevronRight,
   Heart,
@@ -11,6 +12,7 @@ import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
+import { getMyOrders } from "../../services/orderService";
 
 function Profile() {
   const navigate = useNavigate();
@@ -21,9 +23,64 @@ function Profile() {
 
   const wishlistItems = useSelector((state) => state.wishlist?.items || []);
 
-  const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+  const [ordersCount, setOrdersCount] = useState(0);
+
+  const cartCount = cartItems.reduce(
+    (total, item) => total + (Number(item.quantity) || 0),
+    0,
+  );
 
   const wishlistCount = wishlistItems.length;
+
+  // =====================================================
+  // FETCH CUSTOMER ORDER COUNT
+  // =====================================================
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchOrdersCount = async () => {
+      try {
+        const response = await getMyOrders({
+          page: 1,
+          limit: 1,
+        });
+
+        if (!isMounted) return;
+
+        /*
+         * The backend pagination response may expose the
+         * total number of orders through different fields.
+         *
+         * Prefer the common total/count fields without
+         * changing the existing backend API.
+         */
+
+        const total =
+          response?.pagination?.total ??
+          response?.pagination?.totalOrders ??
+          response?.total ??
+          response?.totalOrders ??
+          response?.count ??
+          response?.orders?.length ??
+          0;
+
+        setOrdersCount(Number(total) || 0);
+      } catch {
+        if (isMounted) {
+          setOrdersCount(0);
+        }
+      }
+    };
+
+    if (user) {
+      fetchOrdersCount();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   const userName = user?.fullName || "Customer";
   const userEmail = user?.email || "";
@@ -102,7 +159,7 @@ function Profile() {
           <ProfileStat
             icon={<Package size={20} />}
             label="Orders"
-            value="0"
+            value={ordersCount}
             onClick={() => navigate("/profile/orders")}
           />
 
