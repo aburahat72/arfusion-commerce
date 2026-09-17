@@ -35,7 +35,8 @@ import {
  *
  * NEVER put RAZORPAY_KEY_SECRET here.
  */
-const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+const RAZORPAY_SCRIPT =
+  "https://checkout.razorpay.com/v1/checkout.js";
 
 const RAZORPAY_KEY_ID = "rzp_test_TJP6tHYViiuxXy";
 
@@ -176,12 +177,33 @@ function Payment() {
    * ===================================================
    * NORMALIZE ITEMS
    * ===================================================
+   *
+   * Checkout.jsx sends productId.
+   *
+   * Other existing checkout/payment flows may use
+   * product, id, or _id.
+   *
+   * Support all existing formats without changing
+   * the UI or checkout design.
    */
 
   const normalizedItems = useMemo(() => {
     return items
       .map((item) => ({
-        product: item?.product || item?.id || item?._id,
+        /*
+         * IMPORTANT:
+         *
+         * Checkout.jsx now sends:
+         *
+         * productId: item.id
+         *
+         * Therefore productId must be checked first.
+         */
+        product:
+          item?.productId ||
+          item?.product ||
+          item?.id ||
+          item?._id,
 
         quantity: Number(item?.quantity) || 1,
 
@@ -200,7 +222,9 @@ function Payment() {
       }))
       .filter(
         (item) =>
-          item.product && Number.isInteger(item.quantity) && item.quantity > 0,
+          item.product &&
+          Number.isInteger(item.quantity) &&
+          item.quantity > 0,
       );
   }, [items]);
 
@@ -237,10 +261,14 @@ function Payment() {
     0;
 
   const shipping =
-    Number(summary?.shipping) || Number(summary?.shippingFee) || 0;
+    Number(summary?.shipping) ||
+    Number(summary?.shippingFee) ||
+    0;
 
   const discount =
-    Number(summary?.discount) || Number(summary?.discountAmount) || 0;
+    Number(summary?.discount) ||
+    Number(summary?.discountAmount) ||
+    0;
 
   const total =
     Number(summary?.total) ||
@@ -270,6 +298,8 @@ function Payment() {
    *
    * COD remains separate from Razorpay.
    *
+   * Checkout
+   * ↓
    * Payment
    * ↓
    * COD
@@ -282,23 +312,68 @@ function Payment() {
       return;
     }
 
+    /*
+     * Make sure products exist before calling
+     * the backend.
+     */
+    if (normalizedItems.length === 0) {
+      setErrorMessage("No products were found for this checkout.");
+      return;
+    }
+
+    if (!shippingAddress) {
+      setErrorMessage(
+        "Shipping address is missing. Please return to checkout.",
+      );
+      return;
+    }
+
     setErrorMessage("");
     setLoading(true);
 
     try {
+      /*
+       * IMPORTANT:
+       *
+       * The final Order API expects:
+       *
+       * {
+       *   items: [
+       *     {
+       *       productId,
+       *       quantity
+       *     }
+       *   ],
+       *   shippingAddress,
+       *   paymentMethod
+       * }
+       *
+       * Cart is NOT sent or read here.
+       */
+
+      const orderItems = normalizedItems.map((item) => ({
+        productId: item.product,
+        quantity: item.quantity,
+      }));
+
       const response = await placeOrder({
+        items: orderItems,
         shippingAddress,
         paymentMethod: "COD",
       });
 
       if (!response?.success) {
-        throw new Error(response?.message || "Unable to place your order.");
+        throw new Error(
+          response?.message || "Unable to place your order.",
+        );
       }
 
       const createdOrder = response?.order;
 
       if (!createdOrder?._id) {
-        throw new Error("Order was placed but the order ID was not returned.");
+        throw new Error(
+          "Order was placed but the order ID was not returned.",
+        );
       }
 
       /*
@@ -314,7 +389,10 @@ function Payment() {
       console.error("COD order failed:", error);
 
       setErrorMessage(
-        getErrorMessage(error, "Unable to place your order. Please try again."),
+        getErrorMessage(
+          error,
+          "Unable to place your order. Please try again.",
+        ),
       );
 
       setLoading(false);
@@ -410,6 +488,9 @@ function Payment() {
        * - Razorpay Order
        *
        * It does NOT create the final customer Order.
+       *
+       * The existing payment API expects `product`,
+       * so that contract remains unchanged here.
        */
 
       const paymentResponse = await createPaymentOrder({
@@ -418,7 +499,6 @@ function Payment() {
 
         items: normalizedItems.map((item) => ({
           product: item.product,
-
           quantity: item.quantity,
         })),
       });
@@ -433,14 +513,18 @@ function Payment() {
        * Backend PaymentIntent ID.
        */
       if (!paymentResponse?.paymentIntentId) {
-        throw new Error("Payment intent ID was not returned by the server.");
+        throw new Error(
+          "Payment intent ID was not returned by the server.",
+        );
       }
 
       /*
        * Razorpay Order ID.
        */
       if (!paymentResponse?.orderId) {
-        throw new Error("Razorpay order ID was not returned by the server.");
+        throw new Error(
+          "Razorpay order ID was not returned by the server.",
+        );
       }
 
       paymentIntentRef.current = paymentResponse.paymentIntentId;
@@ -490,7 +574,6 @@ function Payment() {
          */
         notes: {
           paymentIntentId: paymentResponse.paymentIntentId,
-
           checkoutMode,
         },
 
@@ -521,30 +604,23 @@ function Payment() {
              * STEP 4
              * VERIFY PAYMENT ON SERVER
              * =================================================
-             *
-             * Backend verifies:
-             *
-             * - Razorpay signature
-             * - Razorpay order
-             * - amount
-             * - payment intent
-             * - product
-             * - stock
-             *
-             * Then creates the final Order.
              */
 
             const verification = await verifyPayment({
-              razorpay_order_id: razorpayResponse.razorpay_order_id,
+              razorpay_order_id:
+                razorpayResponse.razorpay_order_id,
 
-              razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+              razorpay_payment_id:
+                razorpayResponse.razorpay_payment_id,
 
-              razorpay_signature: razorpayResponse.razorpay_signature,
+              razorpay_signature:
+                razorpayResponse.razorpay_signature,
             });
 
             if (!verification?.success) {
               throw new Error(
-                verification?.message || "Payment verification failed.",
+                verification?.message ||
+                  "Payment verification failed.",
               );
             }
 
@@ -591,7 +667,10 @@ function Payment() {
               replace: true,
             });
           } catch (error) {
-            console.error("Payment verification failed:", error);
+            console.error(
+              "Payment verification failed:",
+              error,
+            );
 
             setErrorMessage(
               getErrorMessage(
@@ -620,7 +699,8 @@ function Payment() {
               return;
             }
 
-            const paymentIntentId = paymentIntentRef.current;
+            const paymentIntentId =
+              paymentIntentRef.current;
 
             /*
              * Mark the temporary payment
@@ -630,9 +710,15 @@ function Payment() {
              */
             if (paymentIntentId) {
               try {
-                await updatePaymentStatus(paymentIntentId, "Cancelled");
+                await updatePaymentStatus(
+                  paymentIntentId,
+                  "Cancelled",
+                );
               } catch (error) {
-                console.error("Unable to update cancelled payment:", error);
+                console.error(
+                  "Unable to update cancelled payment:",
+                  error,
+                );
               }
             }
 
@@ -654,7 +740,9 @@ function Payment() {
        * =================================================
        */
 
-      const razorpay = new window.Razorpay(razorpayOptions);
+      const razorpay = new window.Razorpay(
+        razorpayOptions,
+      );
 
       razorpayRef.current = razorpay;
 
@@ -664,40 +752,53 @@ function Payment() {
        * =================================================
        */
 
-      razorpay.on("payment.failed", async (paymentError) => {
-        console.error("Razorpay payment failed:", paymentError);
+      razorpay.on(
+        "payment.failed",
+        async (paymentError) => {
+          console.error(
+            "Razorpay payment failed:",
+            paymentError,
+          );
 
-        /*
-         * If some unexpected duplicate callback
-         * occurs after successful verification,
-         * don't overwrite Paid state.
-         */
-        if (paymentCompletedRef.current) {
-          return;
-        }
-
-        const paymentIntentId = paymentIntentRef.current;
-
-        /*
-         * Mark PaymentIntent Failed.
-         *
-         * No final Order is created.
-         */
-        if (paymentIntentId) {
-          try {
-            await updatePaymentStatus(paymentIntentId, "Failed");
-          } catch (error) {
-            console.error("Unable to update failed payment:", error);
+          /*
+           * If some unexpected duplicate callback
+           * occurs after successful verification,
+           * don't overwrite Paid state.
+           */
+          if (paymentCompletedRef.current) {
+            return;
           }
-        }
 
-        setLoading(false);
+          const paymentIntentId =
+            paymentIntentRef.current;
 
-        setErrorMessage(
-          paymentError?.error?.description ||
-            "Payment failed. Please try again.",
-        );
-      });
+          /*
+           * Mark PaymentIntent Failed.
+           *
+           * No final Order is created.
+           */
+          if (paymentIntentId) {
+            try {
+              await updatePaymentStatus(
+                paymentIntentId,
+                "Failed",
+              );
+            } catch (error) {
+              console.error(
+                "Unable to update failed payment:",
+                error,
+              );
+            }
+          }
+
+          setLoading(false);
+
+          setErrorMessage(
+            paymentError?.error?.description ||
+              "Payment failed. Please try again.",
+          );
+        },
+      );
 
       /*
        * =================================================
@@ -714,7 +815,10 @@ function Payment() {
        * The callback / dismiss handler will reset it.
        */
     } catch (error) {
-      console.error("Payment initialization failed:", error);
+      console.error(
+        "Payment initialization failed:",
+        error,
+      );
 
       setErrorMessage(
         getErrorMessage(
@@ -735,7 +839,9 @@ function Payment() {
 
   const handleContinue = async () => {
     if (!paymentMethod) {
-      setErrorMessage("Please select a payment method.");
+      setErrorMessage(
+        "Please select a payment method.",
+      );
       return;
     }
 
@@ -761,7 +867,10 @@ function Payment() {
         try {
           razorpayRef.current.close();
         } catch (error) {
-          console.error("Unable to close Razorpay Checkout:", error);
+          console.error(
+            "Unable to close Razorpay Checkout:",
+            error,
+          );
         }
 
         razorpayRef.current = null;
@@ -801,7 +910,9 @@ function Payment() {
             {/* HEADER */}
 
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Payment</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                Payment
+              </h1>
 
               <p className="mt-1 text-sm text-gray-500">
                 Choose your preferred payment method.
@@ -815,7 +926,10 @@ function Payment() {
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-                  <Truck size={19} className="text-gray-700" />
+                  <Truck
+                    size={19}
+                    className="text-gray-700"
+                  />
                 </div>
 
                 <div>
@@ -842,7 +956,9 @@ function Payment() {
 
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
               <div className="mb-5">
-                <h2 className="font-semibold text-gray-900">Payment Method</h2>
+                <h2 className="font-semibold text-gray-900">
+                  Payment Method
+                </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
                   Select how you would like to pay.
@@ -870,7 +986,10 @@ function Payment() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                      <Banknote size={21} className="text-gray-700" />
+                      <Banknote
+                        size={21}
+                        className="text-gray-700"
+                      />
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -893,7 +1012,10 @@ function Payment() {
                           }`}
                         >
                           {paymentMethod === "COD" && (
-                            <Check size={13} className="text-white" />
+                            <Check
+                              size={13}
+                              className="text-white"
+                            />
                           )}
                         </div>
                       </div>
@@ -921,7 +1043,10 @@ function Payment() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                      <CreditCard size={21} className="text-gray-700" />
+                      <CreditCard
+                        size={21}
+                        className="text-gray-700"
+                      />
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -944,7 +1069,10 @@ function Payment() {
                           }`}
                         >
                           {paymentMethod === "ONLINE" && (
-                            <Check size={13} className="text-white" />
+                            <Check
+                              size={13}
+                              className="text-white"
+                            />
                           )}
                         </div>
                       </div>
@@ -952,8 +1080,6 @@ function Payment() {
                   </div>
                 </button>
               </div>
-
-              {/* ERROR */}
 
               {errorMessage && (
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
@@ -969,7 +1095,10 @@ function Payment() {
             ========================================= */}
 
             <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4">
-              <ShieldCheck size={20} className="shrink-0 text-gray-700" />
+              <ShieldCheck
+                size={20}
+                className="shrink-0 text-gray-700"
+              />
 
               <div>
                 <p className="text-sm font-medium text-gray-900">
@@ -977,7 +1106,8 @@ function Payment() {
                 </p>
 
                 <p className="text-xs text-gray-500">
-                  Your payment information is securely processed.
+                  Your payment information is securely
+                  processed.
                 </p>
               </div>
             </div>
@@ -997,7 +1127,10 @@ function Payment() {
 
               <div className="mt-5 space-y-4">
                 {normalizedItems.map((item, index) => (
-                  <div key={`${item.product}-${index}`} className="flex gap-3">
+                  <div
+                    key={`${item.product}-${index}`}
+                    className="flex gap-3"
+                  >
                     {item.image ? (
                       <img
                         src={item.image}
@@ -1006,7 +1139,10 @@ function Payment() {
                       />
                     ) : (
                       <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gray-100">
-                        <CreditCard size={18} className="text-gray-400" />
+                        <CreditCard
+                          size={18}
+                          className="text-gray-400"
+                        />
                       </div>
                     )}
 
@@ -1020,7 +1156,9 @@ function Payment() {
                       </p>
 
                       <p className="mt-1 text-sm font-medium text-gray-900">
-                        {formatCurrency(item.price * item.quantity)}
+                        {formatCurrency(
+                          item.price * item.quantity,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -1031,7 +1169,9 @@ function Payment() {
 
               <div className="mt-6 space-y-3 border-t border-gray-100 pt-5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Subtotal</span>
+                  <span className="text-gray-500">
+                    Subtotal
+                  </span>
 
                   <span className="font-medium text-gray-900">
                     {formatCurrency(subtotal)}
@@ -1039,16 +1179,22 @@ function Payment() {
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Shipping</span>
+                  <span className="text-gray-500">
+                    Shipping
+                  </span>
 
                   <span className="font-medium text-gray-900">
-                    {shipping === 0 ? "Free" : formatCurrency(shipping)}
+                    {shipping === 0
+                      ? "Free"
+                      : formatCurrency(shipping)}
                   </span>
                 </div>
 
                 {discount > 0 && (
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Discount</span>
+                    <span className="text-gray-500">
+                      Discount
+                    </span>
 
                     <span className="font-medium text-gray-900">
                       -{formatCurrency(discount)}
@@ -1057,7 +1203,9 @@ function Payment() {
                 )}
 
                 <div className="flex items-center justify-between border-t border-gray-100 pt-4">
-                  <span className="font-semibold text-gray-900">Total</span>
+                  <span className="font-semibold text-gray-900">
+                    Total
+                  </span>
 
                   <span className="text-xl font-semibold text-gray-900">
                     {formatCurrency(total)}
@@ -1065,9 +1213,7 @@ function Payment() {
                 </div>
               </div>
 
-              {/* =======================================
-                  CONTINUE
-              ======================================= */}
+              {/* CONTINUE */}
 
               <Button
                 type="button"
@@ -1091,7 +1237,9 @@ function Payment() {
               <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
                 <Lock size={13} />
 
-                <span>Secure and protected checkout</span>
+                <span>
+                  Secure and protected checkout
+                </span>
               </div>
             </div>
           </aside>

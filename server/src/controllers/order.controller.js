@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 
 import Order from "../models/order.model.js";
-import Cart from "../models/cart.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
 import InventoryLog from "../models/inventoryLog.model.js";
@@ -28,40 +27,147 @@ export const placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
 
   try {
-    session.startTransaction();
-
     const userId = req.user._id;
-    const { shippingAddress, paymentMethod } = req.body;
+
+    const { items, shippingAddress, paymentMethod } = req.body;
 
     // -------------------------------------------------
-    // FIND USER CART
+    // VALIDATE ORDER ITEMS
     // -------------------------------------------------
 
-    const cart = await Cart.findOne({
-      user: userId,
-    })
-      .populate("items.product")
-      .session(session);
-
-    // -------------------------------------------------
-    // CHECK CART
-    // -------------------------------------------------
-
-    if (!cart || cart.items.length === 0) {
-      await session.abortTransaction();
-
+    if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Cart is empty",
+        message: "Order items are required",
       });
+    }
+
+    // -------------------------------------------------
+    // VALIDATE SHIPPING ADDRESS
+    // -------------------------------------------------
+
+    if (
+      typeof shippingAddress !== "string" ||
+      shippingAddress.trim().length < 5
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid shipping address is required",
+      });
+    }
+
+    // -------------------------------------------------
+    // VALIDATE PAYMENT METHOD
+    // -------------------------------------------------
+
+    if (!["COD", "ONLINE"].includes(paymentMethod)) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment method must be COD or ONLINE",
+      });
+    }
+
+    // -------------------------------------------------
+    // NORMALIZE AND VALIDATE ITEMS
+    // -------------------------------------------------
+
+    const normalizedItems = [];
+
+    for (const item of items) {
+      if (!item || typeof item !== "object") {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid order item",
+        });
+      }
+
+      const productId = item.productId || item.product;
+
+      if (
+        typeof productId !== "string" ||
+        !mongoose.Types.ObjectId.isValid(productId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product ID",
+        });
+      }
+
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Product quantity must be at least 1",
+        });
+      }
+
+      normalizedItems.push({
+        productId,
+        quantity: item.quantity,
+      });
+    }
+
+    // -------------------------------------------------
+    // PREVENT DUPLICATE PRODUCTS
+    // -------------------------------------------------
+
+    const productIdSet = new Set();
+
+    for (const item of normalizedItems) {
+      if (productIdSet.has(item.productId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Duplicate product found in order",
+        });
+      }
+
+      productIdSet.add(item.productId);
+    }
+
+    // -------------------------------------------------
+    // START TRANSACTION
+    // -------------------------------------------------
+
+    session.startTransaction();
+
+    // -------------------------------------------------
+    // FETCH PRODUCTS
+    // -------------------------------------------------
+
+    const products = [];
+
+    for (const item of normalizedItems) {
+      const product = await Product.findById(item.productId).session(session);
+
+      if (!product) {
+        await session.abortTransaction();
+
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${item.productId}`,
+        });
+      }
+
+      products.push(product);
+    }
+
+    // -------------------------------------------------
+    // PRODUCT MAP
+    // -------------------------------------------------
+
+    const productMap = new Map();
+
+    for (const product of products) {
+      productMap.set(product._id.toString(), product);
     }
 
     // -------------------------------------------------
     // VALIDATE PRODUCTS AND STOCK
     // -------------------------------------------------
 
-    for (const item of cart.items) {
-      if (!item.product) {
+    for (const item of normalizedItems) {
+      const product = productMap.get(item.productId);
+
+      if (!product) {
         await session.abortTransaction();
 
         return res.status(404).json({
@@ -70,15 +176,54 @@ export const placeOrder = async (req, res) => {
         });
       }
 
-      if (item.quantity > item.product.stock) {
+      // -------------------------------------------------
+      // CHECK PRODUCT ACTIVE STATUS
+      // -------------------------------------------------
+
+      if (!product.isActive) {
         await session.abortTransaction();
 
         return res.status(400).json({
           success: false,
-          message: `${item.product.name} is out of stock`,
+          message: `${product.name} is currently unavailable`,
+        });
+      }
+
+      // -------------------------------------------------
+      // CHECK STOCK
+      // -------------------------------------------------
+
+      if (item.quantity > product.stock) {
+        await session.abortTransaction();
+
+        return res.status(409).json({
+          success: false,
+          message: `${product.name} does not have enough stock`,
         });
       }
     }
+
+    // -------------------------------------------------
+    // PREPARE ORDER ITEMS
+    // -------------------------------------------------
+
+    const orderItems = normalizedItems.map((item) => {
+      const product = productMap.get(item.productId);
+
+      return {
+        product: product._id,
+        quantity: item.quantity,
+        price: product.price,
+      };
+    });
+
+    // -------------------------------------------------
+    // CALCULATE TOTAL PRICE
+    // -------------------------------------------------
+
+    const totalPrice = orderItems.reduce((total, item) => {
+      return total + item.price * item.quantity;
+    }, 0);
 
     // -------------------------------------------------
     // CREATE ORDER
@@ -89,17 +234,17 @@ export const placeOrder = async (req, res) => {
         {
           user: userId,
 
-          items: cart.items.map((item) => ({
-            product: item.product._id,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+          items: orderItems,
 
-          totalPrice: cart.totalPrice,
+          totalPrice,
 
-          shippingAddress,
+          shippingAddress: shippingAddress.trim(),
 
           paymentMethod,
+
+          paymentStatus: "Pending",
+
+          orderStatus: "Pending",
         },
       ],
       {
@@ -108,39 +253,49 @@ export const placeOrder = async (req, res) => {
     );
 
     // -------------------------------------------------
-    // PREPARE INVENTORY OPERATIONS
+    // PREPARE STOCK UPDATES
     // -------------------------------------------------
 
     const bulkUpdates = [];
     const inventoryLogs = [];
 
-    for (const item of cart.items) {
-      const product = item.product;
+    for (const item of normalizedItems) {
+      const product = productMap.get(item.productId);
 
       const previousStock = product.stock;
 
       const newStock = previousStock - item.quantity;
 
-      // Product stock update
+      // -------------------------------------------------
+      // PRODUCT STOCK UPDATE
+      // -------------------------------------------------
+
       bulkUpdates.push({
         updateOne: {
           filter: {
             _id: product._id,
+
             stock: {
               $gte: item.quantity,
             },
+
+            isActive: true,
           },
 
           update: {
             $set: {
               stock: newStock,
+
               isActive: newStock > 0,
             },
           },
         },
       });
 
-      // Inventory log
+      // -------------------------------------------------
+      // INVENTORY LOG
+      // -------------------------------------------------
+
       inventoryLogs.push({
         product: product._id,
 
@@ -165,7 +320,7 @@ export const placeOrder = async (req, res) => {
     });
 
     // -------------------------------------------------
-    // VERIFY ALL STOCK UPDATES
+    // VERIFY STOCK UPDATES
     // -------------------------------------------------
 
     if (bulkResult.modifiedCount !== bulkUpdates.length) {
@@ -187,25 +342,13 @@ export const placeOrder = async (req, res) => {
     });
 
     // -------------------------------------------------
-    // CLEAR CART
-    // -------------------------------------------------
-
-    cart.items = [];
-
-    cart.totalPrice = 0;
-
-    await cart.save({
-      session,
-    });
-
-    // -------------------------------------------------
     // COMMIT TRANSACTION
     // -------------------------------------------------
 
     await session.commitTransaction();
 
     // -------------------------------------------------
-    // EMAIL CUSTOMER
+    // CUSTOMER EMAIL
     // -------------------------------------------------
 
     try {
@@ -220,7 +363,7 @@ export const placeOrder = async (req, res) => {
     }
 
     // -------------------------------------------------
-    // NOTIFY ADMIN
+    // ADMIN NOTIFICATION
     // -------------------------------------------------
 
     try {
@@ -249,6 +392,7 @@ export const placeOrder = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   } finally {
@@ -310,6 +454,7 @@ export const getMyOrders = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   }
@@ -332,6 +477,7 @@ export const getOrderById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({
         success: false,
+
         message: "Invalid order ID",
       });
     }
@@ -355,6 +501,7 @@ export const getOrderById = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
+
         message: "Order not found",
       });
     }
@@ -373,6 +520,7 @@ export const getOrderById = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   }
@@ -397,6 +545,7 @@ export const cancelOrder = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({
         success: false,
+
         message: "Invalid order ID",
       });
     }
@@ -418,6 +567,7 @@ export const cancelOrder = async (req, res) => {
 
       return res.status(404).json({
         success: false,
+
         message: "Order not found",
       });
     }
@@ -431,6 +581,7 @@ export const cancelOrder = async (req, res) => {
 
       return res.status(400).json({
         success: false,
+
         message: "Order is already cancelled",
       });
     }
@@ -444,6 +595,7 @@ export const cancelOrder = async (req, res) => {
 
       return res.status(400).json({
         success: false,
+
         message: "This order cannot be cancelled",
       });
     }
@@ -480,6 +632,7 @@ export const cancelOrder = async (req, res) => {
 
         return res.status(404).json({
           success: false,
+
           message: "Product not found",
         });
       }
@@ -595,6 +748,7 @@ export const cancelOrder = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   } finally {
@@ -663,6 +817,7 @@ export const getAllOrders = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   }
@@ -683,6 +838,7 @@ export const getAdminOrderById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({
         success: false,
+
         message: "Invalid order ID",
       });
     }
@@ -703,6 +859,7 @@ export const getAdminOrderById = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
+
         message: "Order not found",
       });
     }
@@ -721,6 +878,7 @@ export const getAdminOrderById = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   }
@@ -743,6 +901,7 @@ export const updateOrderStatus = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res.status(400).json({
         success: false,
+
         message: "Invalid order ID",
       });
     }
@@ -756,6 +915,7 @@ export const updateOrderStatus = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
+
         message: "Order not found",
       });
     }
@@ -775,6 +935,7 @@ export const updateOrderStatus = async (req, res) => {
     if (!allowedStatuses.includes(orderStatus)) {
       return res.status(400).json({
         success: false,
+
         message: "Invalid order status",
       });
     }
@@ -786,6 +947,7 @@ export const updateOrderStatus = async (req, res) => {
     if (order.orderStatus === "Cancelled") {
       return res.status(400).json({
         success: false,
+
         message: "Cancelled orders cannot be updated",
       });
     }
@@ -848,6 +1010,7 @@ export const updateOrderStatus = async (req, res) => {
       if (!customer) {
         return res.status(404).json({
           success: false,
+
           message: "Customer not found",
         });
       }
@@ -922,6 +1085,7 @@ export const updateOrderStatus = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: "Internal server error",
     });
   }

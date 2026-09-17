@@ -362,11 +362,16 @@ function Checkout() {
        * Send the actual products and quantities
        * to the Payment page.
        *
-       * The backend will calculate the real prices
+       * IMPORTANT:
+       * The order/payment backend expects
+       * productId, not product.
+       *
+       * Prices are NOT sent from the frontend.
+       * The backend calculates the real prices
        * from the database.
        */
       const items = itemsToCheckout.map((item) => ({
-        product: item.id,
+        productId: item.id,
         quantity: item.quantity,
       }));
 
