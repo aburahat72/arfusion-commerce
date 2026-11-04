@@ -6,6 +6,7 @@ import {
   BarChart3,
   ChevronDown,
   FileBarChart,
+  Flame,
   House,
   Image,
   LayoutDashboard,
@@ -258,6 +259,13 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             to="/admin/banners"
             icon={<Image size={19} />}
             label="Banners"
+            onClose={onClose}
+          />
+
+          <AdminNavItem
+            to="/admin/deals"
+            icon={<Flame size={19} />}
+            label="Deal of the Day"
             onClose={onClose}
           />
 

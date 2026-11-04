@@ -32,6 +32,7 @@ import analyticsRoutes from "./src/routes/analytics.routes.js";
 import returnRoutes from "./src/routes/return.routes.js";
 import inventoryRoutes from "./src/routes/inventory.routes.js";
 import notificationRoutes from "./src/routes/notification.routes.js";
+import dealOfTheDayRoutes from "./src/routes/dealOfTheDay.routes.js";
 
 const app = express();
 
@@ -135,6 +136,8 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/inventory", inventoryRoutes);
 
 app.use("/api/notifications", notificationRoutes);
+
+app.use("/api/deals", dealOfTheDayRoutes);
 
 // =====================================================
 // Admin dashboard routes

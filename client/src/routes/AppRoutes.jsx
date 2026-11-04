@@ -92,6 +92,9 @@ import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
 import AdminReports from "../pages/Admin/Reports/AdminReports";
 import AdminSettings from "../pages/Admin/Settings/AdminSettings";
 import AdminProfile from "../pages/Admin/Profile/AdminProfile";
+import AdminDealOfTheDay from "../pages/Admin/DealOfTheDay/AdminDealOfTheDay";
+import AdminNewDeal from "../pages/Admin/DealOfTheDay/AdminNewDeal";
+import AdminEditDeal from "../pages/Admin/DealOfTheDay/AdminEditDeal";
 
 // =====================================================
 // ROUTE GUARDS
@@ -342,6 +345,16 @@ function AppRoutes() {
             ================================================= */}
 
             <Route path="/admin/profile" element={<AdminProfile />} />
+
+            {/* =================================================
+                DEAL OF THE DAY
+            ================================================= */}
+
+            <Route path="/admin/deals" element={<AdminDealOfTheDay />} />
+
+            <Route path="/admin/deals/new" element={<AdminNewDeal />} />
+
+            <Route path="/admin/deals/:id/edit" element={<AdminEditDeal />} />
           </Route>
         </Route>
 

@@ -56,6 +56,10 @@ const normalizeCart = (cart) => {
 
           const productId = product._id || product.id;
 
+          if (!productId) {
+            return null;
+          }
+
           const image =
             product.images?.[0]?.url ||
             (typeof product.images?.[0] === "string"
@@ -117,6 +121,24 @@ const normalizeCart = (cart) => {
 
 /*
 |--------------------------------------------------------------------------
+| Fetch Fresh Cart
+|--------------------------------------------------------------------------
+|
+| Always gets the populated cart from the backend.
+|
+| This is important because cart mutation endpoints may
+| return an unpopulated cart.
+|
+*/
+
+const fetchNormalizedCart = async () => {
+  const response = await getCart();
+
+  return normalizeCart(response?.cart);
+};
+
+/*
+|--------------------------------------------------------------------------
 | Get Cart
 |--------------------------------------------------------------------------
 */
@@ -125,12 +147,12 @@ export const fetchCart = createAsyncThunk(
   "cart/fetchCart",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await getCart();
-
-      return normalizeCart(response?.cart);
+      return await fetchNormalizedCart();
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to load cart",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to load cart",
       );
     }
   },
@@ -146,18 +168,26 @@ export const addProductToCart = createAsyncThunk(
   "cart/addProductToCart",
   async ({ productId, quantity = 1 }, { rejectWithValue }) => {
     try {
-      const response = await addToCartApi(productId, quantity);
+      if (!productId) {
+        return rejectWithValue("Product ID is required");
+      }
 
       /*
-       * addToCart backend returns an unpopulated cart.
-       *
-       * Fetch again so the frontend receives complete
-       * populated product information.
+       * First update the backend cart.
        */
-      return response;
+      await addToCartApi(productId, quantity);
+
+      /*
+       * Then fetch the authoritative populated cart.
+       *
+       * This immediately synchronizes Redux with the backend.
+       */
+      return await fetchNormalizedCart();
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to add product to cart",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to add product to cart",
       );
     }
   },
@@ -173,12 +203,28 @@ export const updateProductQuantity = createAsyncThunk(
   "cart/updateProductQuantity",
   async ({ productId, quantity }, { rejectWithValue }) => {
     try {
-      const response = await updateCartItemApi(productId, quantity);
+      if (!productId) {
+        return rejectWithValue("Product ID is required");
+      }
 
-      return response;
+      if (!Number.isInteger(Number(quantity)) || Number(quantity) < 1) {
+        return rejectWithValue("Quantity must be at least 1");
+      }
+
+      /*
+       * Update backend first.
+       */
+      await updateCartItemApi(productId, quantity);
+
+      /*
+       * Fetch fresh populated cart.
+       */
+      return await fetchNormalizedCart();
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to update cart",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to update cart",
       );
     }
   },
@@ -194,12 +240,24 @@ export const removeProductFromCart = createAsyncThunk(
   "cart/removeProductFromCart",
   async (productId, { rejectWithValue }) => {
     try {
-      const response = await removeCartItemApi(productId);
+      if (!productId) {
+        return rejectWithValue("Product ID is required");
+      }
 
-      return response;
+      /*
+       * Remove from backend first.
+       */
+      await removeCartItemApi(productId);
+
+      /*
+       * Fetch fresh populated cart.
+       */
+      return await fetchNormalizedCart();
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to remove product",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to remove product",
       );
     }
   },
@@ -215,12 +273,22 @@ export const clearCustomerCart = createAsyncThunk(
   "cart/clearCustomerCart",
   async (_, { rejectWithValue }) => {
     try {
-      const response = await clearCartApi();
+      await clearCartApi();
 
-      return response;
+      /*
+       * The backend has cleared the cart.
+       * Returning an empty normalized cart keeps Redux
+       * immediately synchronized.
+       */
+      return {
+        items: [],
+        totalPrice: 0,
+      };
     } catch (error) {
       return rejectWithValue(
-        error.response?.data?.message || "Failed to clear cart",
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to clear cart",
       );
     }
   },
@@ -300,7 +368,6 @@ const cartSlice = createSlice({
         state.loading = false;
 
         state.items = action.payload.items;
-
         state.totalPrice = action.payload.totalPrice;
 
         state.error = null;
@@ -316,6 +383,15 @@ const cartSlice = createSlice({
      * ========================================================
      * ADD PRODUCT
      * ========================================================
+     *
+     * Backend succeeds
+     *       ↓
+     * Fresh cart is fetched
+     *       ↓
+     * Redux items are updated
+     *       ↓
+     * Header/cart UI updates immediately
+     *
      */
 
     builder
@@ -324,8 +400,12 @@ const cartSlice = createSlice({
         state.error = null;
       })
 
-      .addCase(addProductToCart.fulfilled, (state) => {
+      .addCase(addProductToCart.fulfilled, (state, action) => {
         state.actionLoading = false;
+
+        state.items = action.payload.items;
+        state.totalPrice = action.payload.totalPrice;
+
         state.error = null;
       })
 
@@ -347,8 +427,12 @@ const cartSlice = createSlice({
         state.error = null;
       })
 
-      .addCase(updateProductQuantity.fulfilled, (state) => {
+      .addCase(updateProductQuantity.fulfilled, (state, action) => {
         state.actionLoading = false;
+
+        state.items = action.payload.items;
+        state.totalPrice = action.payload.totalPrice;
+
         state.error = null;
       })
 
@@ -370,8 +454,12 @@ const cartSlice = createSlice({
         state.error = null;
       })
 
-      .addCase(removeProductFromCart.fulfilled, (state) => {
+      .addCase(removeProductFromCart.fulfilled, (state, action) => {
         state.actionLoading = false;
+
+        state.items = action.payload.items;
+        state.totalPrice = action.payload.totalPrice;
+
         state.error = null;
       })
 
@@ -393,10 +481,12 @@ const cartSlice = createSlice({
         state.error = null;
       })
 
-      .addCase(clearCustomerCart.fulfilled, (state) => {
+      .addCase(clearCustomerCart.fulfilled, (state, action) => {
         state.actionLoading = false;
-        state.items = [];
-        state.totalPrice = 0;
+
+        state.items = action.payload.items;
+        state.totalPrice = action.payload.totalPrice;
+
         state.error = null;
       })
 
@@ -408,6 +498,18 @@ const cartSlice = createSlice({
   },
 });
 
+/*
+|--------------------------------------------------------------------------
+| Export Local Actions
+|--------------------------------------------------------------------------
+*/
+
 export const { resetCart, removePurchasedItems } = cartSlice.actions;
+
+/*
+|--------------------------------------------------------------------------
+| Export Reducer
+|--------------------------------------------------------------------------
+*/
 
 export default cartSlice.reducer;
