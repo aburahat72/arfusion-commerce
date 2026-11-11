@@ -34,6 +34,7 @@ import returnRoutes from "./src/routes/return.routes.js";
 import inventoryRoutes from "./src/routes/inventory.routes.js";
 import notificationRoutes from "./src/routes/notification.routes.js";
 import dealOfTheDayRoutes from "./src/routes/dealOfTheDay.routes.js";
+import homepageStatisticsRoutes from "./src/routes/homepageStatistics.routes.js";
 import { initializeSocket } from "./src/realtime/socket.server.js";
 
 const app = express();
@@ -142,6 +143,8 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/deals", dealOfTheDayRoutes);
+
+app.use("/api/homepage-statistics", homepageStatisticsRoutes);
 
 // =====================================================
 // Admin dashboard routes

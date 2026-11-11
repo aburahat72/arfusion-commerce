@@ -15,7 +15,6 @@ import {
   Percent,
   ShoppingCart,
   Star,
-  Settings,
   Tags,
   Users,
   Warehouse,
@@ -276,9 +275,9 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
           <NavSection label="Analytics" />
 
           <AdminNavItem
-            to="/admin/analytics"
+            to="/admin/homepage-statistics"
             icon={<BarChart3 size={19} />}
-            label="Analytics"
+            label="Homepage Statistics"
             onClose={onClose}
           />
 
@@ -289,18 +288,7 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             onClose={onClose}
           />
 
-          {/* =================================================
-              SETTINGS
-          ================================================= */}
-
-          <NavSection label="Settings" />
-
-          <AdminNavItem
-            to="/admin/settings"
-            icon={<Settings size={19} />}
-            label="Settings"
-            onClose={onClose}
-          />
+          <NavSection label="Account" />
 
           <AdminNavItem
             to="/admin/profile"

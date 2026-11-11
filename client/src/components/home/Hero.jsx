@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getPublicBanners } from "../../services/bannerPublicService";
+import { getPublicHomepageStatistics } from "../../services/homepageStatisticsService";
 
 // =====================================================
 // DEFAULT COLORS
@@ -32,6 +33,7 @@ function Hero() {
   const [error, setError] = useState("");
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [homepageStatistics, setHomepageStatistics] = useState(null);
 
   // ===================================================
   // LOAD PUBLIC BANNERS
@@ -71,7 +73,31 @@ function Hero() {
   // ===================================================
 
   useEffect(() => {
-    loadBanners();
+    const timer = window.setTimeout(loadBanners, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadStatistics = async () => {
+      try {
+        const statistics = await getPublicHomepageStatistics();
+        if (active) {
+          setHomepageStatistics(statistics);
+        }
+      } catch (statisticsError) {
+        console.error("Load homepage statistics error:", statisticsError);
+      }
+    };
+
+    loadStatistics();
+    const interval = window.setInterval(loadStatistics, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
   // ===================================================
@@ -204,7 +230,17 @@ function Hero() {
   const primaryButton = activeBanner.primaryButton || {};
   const secondaryButton = activeBanner.secondaryButton || {};
 
-  const stats = Array.isArray(activeBanner.stats) ? activeBanner.stats : [];
+  const stats = homepageStatistics
+    ? [
+        { key: "customers", label: "Happy Customers", format: "count" },
+        { key: "products", label: "Products", format: "count" },
+        {
+          key: "satisfaction",
+          label: "Customer Satisfaction",
+          format: "percentage",
+        },
+      ]
+    : [];
 
   // ===================================================
   // CTA HANDLER
@@ -312,7 +348,10 @@ function Hero() {
                     `}
                   >
                     <p className="text-xl font-semibold text-text">
-                      {stat.value}
+                      <AnimatedStatistic
+                        value={homepageStatistics[stat.key]}
+                        format={stat.format}
+                      />
                     </p>
 
                     <p className="mt-1 text-xs leading-5 text-text-secondary">
@@ -476,6 +515,56 @@ function Hero() {
       </div>
     </section>
   );
+}
+
+function AnimatedStatistic({ value, format }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const target = Number(value);
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    if (!Number.isFinite(target)) {
+      return undefined;
+    }
+
+    if (reducedMotion || target === 0) {
+      const frameId = window.requestAnimationFrame(() =>
+        setDisplayValue(target),
+      );
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    const duration = 1100;
+    const startedAt = performance.now();
+    let frameId;
+
+    const animate = (now) => {
+      const progress = Math.min((now - startedAt) / duration, 1);
+      const easedProgress = 1 - (1 - progress) ** 3;
+      setDisplayValue(Math.round(target * easedProgress));
+
+      if (progress < 1) {
+        frameId = window.requestAnimationFrame(animate);
+      }
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [value]);
+
+  if (format === "percentage") {
+    return `${displayValue}%`;
+  }
+
+  const compactValue = new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(displayValue);
+
+  return `${compactValue}+`;
 }
 
 // =====================================================

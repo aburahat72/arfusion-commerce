@@ -88,9 +88,8 @@ import AdminBannerEdit from "../pages/Admin/Banners/AdminBannerEdit";
 // =====================================================
 
 import AdminCoupons from "../pages/Admin/Coupons/AdminCoupons";
-import AdminAnalytics from "../pages/Admin/Analytics/AdminAnalytics";
+import AdminHomepageStatistics from "../pages/Admin/Analytics/AdminHomepageStatistics";
 import AdminReports from "../pages/Admin/Reports/AdminReports";
-import AdminSettings from "../pages/Admin/Settings/AdminSettings";
 import AdminProfile from "../pages/Admin/Profile/AdminProfile";
 import AdminDealOfTheDay from "../pages/Admin/DealOfTheDay/AdminDealOfTheDay";
 import AdminNewDeal from "../pages/Admin/DealOfTheDay/AdminNewDeal";
@@ -326,19 +325,16 @@ function AppRoutes() {
                 ANALYTICS
             ================================================= */}
 
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            <Route
+              path="/admin/homepage-statistics"
+              element={<AdminHomepageStatistics />}
+            />
 
             {/* =================================================
                 REPORTS
             ================================================= */}
 
             <Route path="/admin/reports" element={<AdminReports />} />
-
-            {/* =================================================
-                SETTINGS
-            ================================================= */}
-
-            <Route path="/admin/settings" element={<AdminSettings />} />
 
             {/* =================================================
                 PROFILE
