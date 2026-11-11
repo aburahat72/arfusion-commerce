@@ -23,7 +23,8 @@ export const createOrderSchema = z.object({
           .min(1, "Quantity must be at least 1"),
       }),
     )
-    .min(1, "At least one product is required"),
+    .min(1, "At least one product is required")
+    .max(100, "An order cannot contain more than 100 line items"),
 
   // ---------------------------------------------------
   // SHIPPING ADDRESS
@@ -39,9 +40,9 @@ export const createOrderSchema = z.object({
   // PAYMENT METHOD
   // ---------------------------------------------------
 
-  paymentMethod: z.enum(["COD", "ONLINE"], {
+  paymentMethod: z.literal("COD", {
     errorMap: () => ({
-      message: "Payment method must be COD or ONLINE",
+      message: "Online payment orders must use the Razorpay verification flow",
     }),
   }),
 });

@@ -5,6 +5,7 @@
 import ReactDOM from "react-dom/client";
 import { Provider } from "react-redux";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ import { AuthProvider } from "./context/AuthContext";
 // =====================================================
 
 import { AdminAuthProvider } from "./context/AdminAuthContext";
+import RealtimeBridge from "./components/realtime/RealtimeBridge";
 
 // =====================================================
 // GLOBAL STYLES
@@ -41,7 +43,7 @@ import "./index.css";
 // RENDER APPLICATION
 // =====================================================
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+const application = (
   <Provider store={store}>
     {/* =================================================
         CUSTOMER + ADMIN AUTH PROVIDERS
@@ -58,9 +60,23 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
       <AdminAuthProvider>
-        <App />
+        <>
+          <RealtimeBridge />
+          <App />
+        </>
       </AdminAuthProvider>
       </AuthProvider>
     </QueryClientProvider>
-  </Provider>,
+  </Provider>
+);
+
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+ReactDOM.createRoot(document.getElementById("root")).render(
+  googleClientId ? (
+    <GoogleOAuthProvider clientId={googleClientId}>
+      {application}
+    </GoogleOAuthProvider>
+  ) : (
+    application
+  ),
 );

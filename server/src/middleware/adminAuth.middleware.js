@@ -18,7 +18,7 @@ export const protectedRoute = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
-    console.log("ADMIN AUTH HEADER:", authHeader);
+    // console.log("ADMIN AUTH HEADER:", authHeader);
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({

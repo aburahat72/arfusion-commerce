@@ -1,9 +1,11 @@
 import express from "express";
+import { z } from "zod";
 
 import {
   registerUser,
   loginUser,
   getProfile,
+  googleLogin,
 } from "../controllers/customerAuth.controller.js";
 
 import validate from "../middleware/validate.middleware.js";
@@ -41,6 +43,17 @@ router.post(
   authLimiter,
   validate(loginSchema),
   loginUser,
+);
+
+router.post(
+  "/google",
+  authLimiter,
+  validate(
+    z.object({
+      credential: z.string().min(1).max(8192),
+    }),
+  ),
+  googleLogin,
 );
 
 // Get authenticated customer profile

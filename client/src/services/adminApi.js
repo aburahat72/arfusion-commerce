@@ -99,6 +99,16 @@ export const getAdminOrderById = (orderId) => {
   return adminApi.get(`/orders/admin/${orderId}`);
 };
 
+export const getAdminAnalytics = async (params = {}, options = {}) => {
+  const response = await adminApi.get("/analytics", { params, ...options });
+  return response.data;
+};
+
+export const getAdminInventory = async (options = {}) => {
+  const response = await adminApi.get("/inventory", options);
+  return response.data;
+};
+
 // Update order stage
 export const updateAdminOrderStatus = (orderId, orderStatus) => {
   return adminApi.patch(`/orders/${orderId}/status`, {

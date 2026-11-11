@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { ShoppingCart, Mail, Lock, Eye, EyeOff, Check } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { GoogleLogin } from "@react-oauth/google";
 
 import { useAuth } from "../../context/AuthContext";
 import customerApi from "../../services/customerApi";
@@ -181,8 +182,37 @@ function Login() {
   // GOOGLE LOGIN
   // =====================================================
 
-  const handleGoogleLogin = () => {
-    console.log("Continue with Google");
+  const handleGoogleSuccess = async ({ credential }) => {
+    if (!credential) {
+      setErrors({ general: "Google did not return an identity token." });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setErrors({});
+      const response = await customerApi.post("/auth/customer/google", {
+        credential,
+      });
+      const { token, user } = response.data || {};
+      if (!response.data?.success || !token || user?.role !== "customer") {
+        throw new Error(
+          response.data?.message || "Google sign-in returned an invalid response.",
+        );
+      }
+
+      login(token, user);
+      navigate(location.state?.from?.pathname || "/", { replace: true });
+    } catch (error) {
+      setErrors({
+        general:
+          error.response?.data?.message ||
+          error.message ||
+          "Google sign-in failed. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // =====================================================
@@ -396,48 +426,28 @@ function Login() {
               GOOGLE LOGIN
           ================================================= */}
 
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={isLoading}
-            className="
-              flex
-              h-11.25
-              w-full
-              items-center
-              justify-center
-              gap-3
-              rounded-[9px]
-              border
-              border-[#D7DCE4]
-              bg-white
-              text-[13.5px]
-              font-semibold
-              text-[#111827]
-              transition
-              duration-200
-              hover:border-[#C5CAD4]
-              hover:shadow-[0_5px_14px_rgba(20,30,50,0.08)]
-              active:translate-y-px
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-              sm:h-11.75
-              sm:text-[14px]
-            "
-          >
-            <span
-              className="
-                font-[Arial]
-                text-[18px]
-                font-bold
-                text-[#4285F4]
-              "
-            >
-              G
-            </span>
-
-            <span>Continue with Google</span>
-          </button>
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID ? (
+            <div className="flex min-h-11.25 w-full justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() =>
+                  setErrors({
+                    general: "Google sign-in was cancelled or could not start.",
+                  })
+                }
+                theme="outline"
+                shape="rectangular"
+                size="large"
+                width="350"
+                text="continue_with"
+                useOneTap={false}
+              />
+            </div>
+          ) : (
+            <p className="text-center text-xs text-[#64748B]">
+              Google sign-in is unavailable until VITE_GOOGLE_CLIENT_ID is configured.
+            </p>
+          )}
 
           {/* =================================================
               LOGIN METHOD DIVIDER

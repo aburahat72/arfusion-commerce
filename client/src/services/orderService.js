@@ -50,6 +50,11 @@ export const cancelOrder = async (orderId) => {
   return response.data;
 };
 
+export const requestReturn = async (orderId, returnData) => {
+  const response = await customerApi.post(`/returns/${orderId}`, returnData);
+  return response.data;
+};
+
 /*
  * =========================
  * RAZORPAY PAYMENT

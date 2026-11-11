@@ -6,19 +6,26 @@ import {
   CreditCard,
   MapPin,
   Package,
+  RotateCcw,
   Truck,
   XCircle,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getOrderById } from "../../services/orderService";
+import { getOrderById, requestReturn } from "../../services/orderService";
 
 function OrderDetails() {
   const navigate = useNavigate();
   const { orderId } = useParams();
 
   const [order, setOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(orderId));
   const [error, setError] = useState("");
+  const [eventRefresh, setEventRefresh] = useState(0);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnType, setReturnType] = useState("Replacement");
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [returnError, setReturnError] = useState("");
+  const [returnMessage, setReturnMessage] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -47,15 +54,24 @@ function OrderDetails() {
       }
     };
 
-    if (orderId) {
-      fetchOrder();
-    } else {
-      setError("Invalid order ID.");
-      setLoading(false);
-    }
+    if (orderId) fetchOrder();
 
     return () => {
       isMounted = false;
+    };
+  }, [orderId, eventRefresh]);
+
+  useEffect(() => {
+    const refreshOrder = (event) => {
+      if (event.detail?.orderId === orderId) {
+        setEventRefresh((refresh) => refresh + 1);
+      }
+    };
+    window.addEventListener("arfusion:order:status", refreshOrder);
+    window.addEventListener("arfusion:payment:status", refreshOrder);
+    return () => {
+      window.removeEventListener("arfusion:order:status", refreshOrder);
+      window.removeEventListener("arfusion:payment:status", refreshOrder);
     };
   }, [orderId]);
 
@@ -196,6 +212,43 @@ function OrderDetails() {
     );
   };
 
+  const canRequestReturn =
+    order?.orderStatus === "Delivered" &&
+    order?.returnStatus === "Not Requested" &&
+    Boolean(order?.returnEligibleUntil);
+
+  const canRequestRefund =
+    order?.paymentMethod === "ONLINE" &&
+    order?.paymentStatus === "Paid";
+
+  const submitReturnRequest = async (event) => {
+    event.preventDefault();
+    if (returnSubmitting) return;
+    setReturnSubmitting(true);
+    setReturnError("");
+    setReturnMessage("");
+    try {
+      const response = await requestReturn(orderId, {
+        returnReason,
+        requestType: returnType,
+      });
+      if (!response?.success || !response.order) {
+        throw new Error(response?.message || "Return request failed.");
+      }
+      setOrder(response.order);
+      setReturnMessage(response.message);
+      setReturnReason("");
+    } catch (requestError) {
+      setReturnError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Unable to submit return request.",
+      );
+    } finally {
+      setReturnSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-background py-6 sm:py-8">
@@ -216,7 +269,8 @@ function OrderDetails() {
     );
   }
 
-  if (error || !order) {
+  const displayError = orderId ? error : "Invalid order ID.";
+  if (displayError || !order) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4">
         <section className="w-full max-w-md rounded-2xl border border-outline-variant bg-surface p-8 text-center shadow-sm">
@@ -229,7 +283,7 @@ function OrderDetails() {
           </h1>
 
           <p className="mt-2 text-sm leading-6 text-text-secondary">
-            {error || "We couldn't find this order."}
+            {displayError || "We couldn't find this order."}
           </p>
 
           <button
@@ -559,6 +613,86 @@ function OrderDetails() {
                 </span>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Order Metadata */}
+        <section className="mt-5 rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
+          <div className="flex items-center gap-2">
+            <RotateCcw size={19} className="text-primary" />
+            <h2 className="text-base font-semibold text-text">
+              Returns and refunds
+            </h2>
+          </div>
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-text-secondary">
+              Return status:{" "}
+              <span className="font-semibold text-text">
+                {order.returnStatus || "Not Requested"}
+              </span>
+              {order.refundStatus &&
+                order.refundStatus !== "Not Applicable" && (
+                  <>
+                    {" · "}Refund status:{" "}
+                    <span className="font-semibold text-text">
+                      {order.refundStatus}
+                    </span>
+                  </>
+                )}
+            </p>
+            {order.returnReason && (
+              <p className="text-sm text-text-secondary">
+                Reason: {order.returnReason}
+              </p>
+            )}
+            {returnMessage && (
+              <p role="status" className="text-sm text-green-700">
+                {returnMessage}
+              </p>
+            )}
+            {returnError && (
+              <p role="alert" className="text-sm text-red-600">
+                {returnError}
+              </p>
+            )}
+            {canRequestReturn ? (
+              <form onSubmit={submitReturnRequest} className="grid gap-3">
+                <label className="grid gap-1 text-sm font-medium text-text">
+                  Request type
+                  <select
+                    value={returnType}
+                    onChange={(event) => setReturnType(event.target.value)}
+                    className="h-10 rounded-lg border border-outline-variant bg-surface px-3"
+                  >
+                    {canRequestRefund && <option value="Refund">Refund</option>}
+                    <option value="Replacement">Replacement</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-sm font-medium text-text">
+                  Reason (10-500 characters)
+                  <textarea
+                    value={returnReason}
+                    onChange={(event) => setReturnReason(event.target.value)}
+                    minLength={10}
+                    maxLength={500}
+                    required
+                    rows={3}
+                    className="rounded-lg border border-outline-variant bg-surface px-3 py-2"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={returnSubmitting || returnReason.trim().length < 10}
+                  className="h-10 justify-self-start rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {returnSubmitting ? "Submitting..." : "Submit request"}
+                </button>
+              </form>
+            ) : (
+              <p className="text-xs text-text-secondary">
+                Returns can be requested for delivered orders before the return window expires.
+              </p>
+            )}
           </div>
         </section>
 

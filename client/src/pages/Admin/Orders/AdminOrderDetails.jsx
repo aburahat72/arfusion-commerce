@@ -5,7 +5,6 @@ import {
   Clock3,
   Copy,
   CreditCard,
-  ExternalLink,
   Loader2,
   MapPin,
   Package,
@@ -21,7 +20,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
+  approveReturn,
+  completeRefund,
+  completeReplacement,
   getAdminOrderById,
+  rejectReturn,
   updateAdminOrderStatus,
 } from "../../../services/adminApi";
 
@@ -40,10 +43,40 @@ function AdminOrderDetails() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [actionLoading, setActionLoading] = useState(false);
+  const [returnActionLoading, setReturnActionLoading] = useState(false);
+  const [returnMessage, setReturnMessage] = useState("");
 
   const [error, setError] = useState("");
 
   const [copied, setCopied] = useState("");
+
+  const runReturnAction = async (action, successMessage) => {
+    if (returnActionLoading) return;
+    setReturnActionLoading(true);
+    setError("");
+    setReturnMessage("");
+    try {
+      const response = await action(orderId);
+      const data = response?.data;
+      if (data?.order) setOrder(data.order);
+      if (!data?.success) {
+        throw new Error(data?.message || "Return action failed.");
+      }
+      setReturnMessage(data.message || successMessage);
+      await fetchOrder(true);
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "Return action failed.",
+      );
+      if (requestError.response?.data?.order) {
+        setOrder(requestError.response.data.order);
+      }
+    } finally {
+      setReturnActionLoading(false);
+    }
+  };
 
   // =====================================================
   // FETCH ORDER
@@ -109,6 +142,22 @@ function AdminOrderDetails() {
   useEffect(() => {
     fetchOrder();
   }, [fetchOrder]);
+
+  useEffect(() => {
+    const refreshRelatedOrder = (event) => {
+      if (event.detail?.orderId === orderId) {
+        fetchOrder(true);
+      }
+    };
+    window.addEventListener("arfusion:order:status", refreshRelatedOrder);
+    window.addEventListener("arfusion:payment:status", refreshRelatedOrder);
+    window.addEventListener("arfusion:return:status", refreshRelatedOrder);
+    return () => {
+      window.removeEventListener("arfusion:order:status", refreshRelatedOrder);
+      window.removeEventListener("arfusion:payment:status", refreshRelatedOrder);
+      window.removeEventListener("arfusion:return:status", refreshRelatedOrder);
+    };
+  }, [fetchOrder, orderId]);
 
   // =====================================================
   // DERIVED DATA
@@ -182,9 +231,7 @@ function AdminOrderDetails() {
     String(paymentMethod).toUpperCase() === "COD";
 
   const codPaymentPending =
-    isCod &&
-    String(paymentStatus).toLowerCase() ===
-      "pending";
+    isCod && String(paymentStatus).toLowerCase() === "pending";
 
   const customer = order?.user || {};
 
@@ -229,23 +276,6 @@ function AdminOrderDetails() {
     }
 
     if (currentStatus === nextStatus) {
-      return;
-    }
-
-    // -------------------------------------------------
-    // FRONTEND BUSINESS RULE
-    // COD + PAYMENT PENDING
-    // CANNOT BE DELIVERED
-    // -------------------------------------------------
-
-    if (
-      nextStatus === "Delivered" &&
-      codPaymentPending
-    ) {
-      setError(
-        "COD order cannot be marked as Delivered while the payment status is Pending. Confirm the COD payment first.",
-      );
-
       return;
     }
 
@@ -939,6 +969,23 @@ function AdminOrderDetails() {
 
           <ReturnInformation
             order={order}
+            loading={returnActionLoading}
+            message={returnMessage}
+            onApprove={() =>
+              runReturnAction(approveReturn, "Return request approved.")
+            }
+            onReject={() =>
+              runReturnAction(rejectReturn, "Return request rejected.")
+            }
+            onRefund={() =>
+              runReturnAction(completeRefund, "Refund status checked.")
+            }
+            onReplacement={() =>
+              runReturnAction(
+                completeReplacement,
+                "Replacement request fulfilled.",
+              )
+            }
           />
         </div>
 
@@ -1104,10 +1151,8 @@ function AdminOrderDetails() {
                     </p>
 
                     <p className="mt-1 text-[10px] leading-4 text-orange-600">
-                      Payment is still pending.
-                      Delivery confirmation
-                      requires payment to be
-                      marked as Paid.
+                      Confirm delivery only after collecting the COD payment.
+                      The order will then be marked as Paid.
                     </p>
                   </div>
                 )}
@@ -1712,6 +1757,12 @@ function AddressBlock({
 
 function ReturnInformation({
   order,
+  loading,
+  message,
+  onApprove,
+  onReject,
+  onRefund,
+  onReplacement,
 }) {
   const hasReturnData =
     order?.returnStatus ||
@@ -1803,6 +1854,64 @@ function ReturnInformation({
             </p>
           </div>
         )}
+
+        {message && (
+          <p role="status" className="text-sm text-green-700">
+            {message}
+          </p>
+        )}
+
+        {order.returnStatus === "Pending" && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onApprove}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onReject}
+              className="rounded-lg border border-outline-variant px-3 py-2 text-xs font-semibold text-text disabled:opacity-60"
+            >
+              Reject
+            </button>
+          </div>
+        )}
+
+        {order.returnStatus === "Approved" &&
+          order.refundRequested &&
+          order.refundStatus !== "Completed" && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onRefund}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              {loading
+                ? "Checking..."
+                : order.refundStatus === "Processing"
+                  ? "Check Razorpay refund"
+                  : order.refundStatus === "Failed"
+                    ? "Retry refund"
+                    : "Issue Razorpay refund"}
+            </button>
+          )}
+
+        {order.returnStatus === "Approved" &&
+          order.replacementRequested && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onReplacement}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              {loading ? "Processing..." : "Fulfill replacement"}
+            </button>
+          )}
       </div>
     </section>
   );
@@ -1953,24 +2062,7 @@ function SummaryRow({
 
 function getAvailableActions({
   status,
-  paymentMethod,
-  paymentStatus,
 }) {
-  const isCod =
-    String(
-      paymentMethod || "",
-    ).toUpperCase() ===
-    "COD";
-
-  const paymentPending =
-    String(
-      paymentStatus || "",
-    ).toLowerCase() ===
-    "pending";
-
-  const cannotDeliver =
-    isCod && paymentPending;
-
   switch (status) {
     case "Pending":
       return [
@@ -2011,8 +2103,6 @@ function getAvailableActions({
           status: "Delivered",
           icon: CheckCircle2,
           danger: false,
-          blocked:
-            cannotDeliver,
         },
       ];
 

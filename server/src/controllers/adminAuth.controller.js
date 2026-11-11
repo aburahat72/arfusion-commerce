@@ -57,7 +57,7 @@ export const loginAdmin = async (req, res) => {
     );
 
     // Temporary development logging
-    console.log("ADMIN JWT:", token);
+    // console.log("ADMIN JWT:", token);
 
     return res.status(200).json({
       success: true,

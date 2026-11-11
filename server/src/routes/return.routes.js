@@ -9,6 +9,8 @@ import {
   completeRefund,
   completeReplacement,
 } from "../controllers/return.controller.js";
+import validate from "../middleware/validate.middleware.js";
+import { requestReturnSchema } from "../validations/return.validations.js";
 
 import { protectedRoute as customerProtectedRoute } from "../middleware/customerAuth.middleware.js";
 
@@ -23,7 +25,12 @@ const router = express.Router();
 
 // Request Return
 
-router.post("/:orderId", customerProtectedRoute, requestReturn);
+router.post(
+  "/:orderId",
+  customerProtectedRoute,
+  validate(requestReturnSchema),
+  requestReturn,
+);
 
 // Get My Return Requests
 

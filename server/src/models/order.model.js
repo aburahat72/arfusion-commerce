@@ -2,6 +2,13 @@ import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema(
   {
+    paymentIntent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaymentIntent",
+      unique: true,
+      sparse: true,
+    },
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -50,8 +57,20 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Failed"],
+      enum: ["Pending", "Paid", "Failed", "Refunded"],
       default: "Pending",
+    },
+
+    razorpayPaymentId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
+    razorpayRefundId: {
+      type: String,
+      trim: true,
+      default: "",
     },
 
     orderStatus: {
@@ -82,6 +101,12 @@ const orderSchema = new mongoose.Schema(
       default: "",
     },
 
+    returnType: {
+      type: String,
+      enum: ["Refund", "Replacement", null],
+      default: null,
+    },
+
     // Date when customer requested return
     returnRequestedAt: {
       type: Date,
@@ -97,8 +122,18 @@ const orderSchema = new mongoose.Schema(
     // Refund Status
     refundStatus: {
       type: String,
-      enum: ["Not Applicable", "Pending", "Completed"],
+      enum: ["Not Applicable", "Pending", "Processing", "Completed", "Failed"],
       default: "Not Applicable",
+    },
+
+    refundCompletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    refundAttemptedAt: {
+      type: Date,
+      default: null,
     },
 
     // Replacement request

@@ -1,4 +1,5 @@
 import Notification from "../models/notification.model.js";
+import { emitToAdmins, emitToCustomer } from "../realtime/socket.server.js";
 
 // Create Notification
 export const createNotification = async ({
@@ -20,6 +21,13 @@ export const createNotification = async ({
       relatedOrder,
       relatedProduct,
     });
+
+    const payload = notification.toObject();
+    if (recipient === "admin") {
+      emitToAdmins("notification:new", payload);
+    } else if (user) {
+      emitToCustomer(user, "notification:new", payload);
+    }
 
     return notification;
   } catch (error) {

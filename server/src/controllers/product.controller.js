@@ -3,6 +3,7 @@ import cloudinary from "../config/cloudinary.js";
 
 import Product from "../models/product.model.js";
 import Category from "../models/category.model.js";
+import { emitToAdmins } from "../realtime/socket.server.js";
 
 import { uploadToCloudinary } from "../../utils/cloudinaryUpload.js";
 
@@ -578,6 +579,11 @@ export const createProduct = async (req, res) => {
     // -------------------------------------------------
 
     await product.populate("category", "name slug image isActive");
+    emitToAdmins("inventory:updated", {
+      productId: product._id.toString(),
+      stock: product.stock,
+      source: "product-created",
+    });
 
     // -------------------------------------------------
     // SUCCESS
@@ -669,6 +675,8 @@ export const updateProduct = async (req, res) => {
       });
     }
 
+    const previousStock = product.stock;
+
     // -------------------------------------------------
     // REQUEST DATA
     // -------------------------------------------------
@@ -744,6 +752,13 @@ export const updateProduct = async (req, res) => {
     // -------------------------------------------------
 
     await product.populate("category", "name slug image isActive");
+    if (previousStock !== product.stock) {
+      emitToAdmins("inventory:updated", {
+        productId: product._id.toString(),
+        stock: product.stock,
+        source: "product-edit",
+      });
+    }
 
     // -------------------------------------------------
     // SUCCESS

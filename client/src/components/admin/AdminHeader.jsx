@@ -1,8 +1,34 @@
 import { Bell, ChevronDown, Menu, Search, UserCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import adminApi from "../../services/adminApi";
 
 function AdminHeader({ onMenuClick }) {
   const [search, setSearch] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    adminApi
+      .get("/notifications/unread-count")
+      .then(({ data }) => {
+        if (active) setUnreadCount(Number(data?.unreadCount) || 0);
+      })
+      .catch((error) => {
+        console.error("Unable to load admin notification count:", error);
+      });
+
+    const handleNotification = () => {
+      setUnreadCount((count) => count + 1);
+    };
+    window.addEventListener("arfusion:notification:new", handleNotification);
+    return () => {
+      active = false;
+      window.removeEventListener(
+        "arfusion:notification:new",
+        handleNotification,
+      );
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 border-b border-outline-variant bg-surface/95 backdrop-blur">
@@ -128,9 +154,11 @@ function AdminHeader({ onMenuClick }) {
           >
             <Bell size={20} />
 
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-semibold text-white">
-              8
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-semibold text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </button>
 
           {/* Admin profile */}

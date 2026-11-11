@@ -4,6 +4,11 @@ import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
 import InventoryLog from "../models/inventoryLog.model.js";
+import {
+  CheckoutInputError,
+  normalizeCheckoutItems,
+} from "../utils/checkoutItems.js";
+import { emitToAdmins, emitToCustomer } from "../realtime/socket.server.js";
 
 import {
   sendOrderConfirmationEmail,
@@ -60,10 +65,10 @@ export const placeOrder = async (req, res) => {
     // VALIDATE PAYMENT METHOD
     // -------------------------------------------------
 
-    if (!["COD", "ONLINE"].includes(paymentMethod)) {
+    if (paymentMethod !== "COD") {
       return res.status(400).json({
         success: false,
-        message: "Payment method must be COD or ONLINE",
+        message: "This endpoint only accepts Cash on Delivery orders.",
       });
     }
 
@@ -71,57 +76,7 @@ export const placeOrder = async (req, res) => {
     // NORMALIZE AND VALIDATE ITEMS
     // -------------------------------------------------
 
-    const normalizedItems = [];
-
-    for (const item of items) {
-      if (!item || typeof item !== "object") {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid order item",
-        });
-      }
-
-      const productId = item.productId || item.product;
-
-      if (
-        typeof productId !== "string" ||
-        !mongoose.Types.ObjectId.isValid(productId)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid product ID",
-        });
-      }
-
-      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
-        return res.status(400).json({
-          success: false,
-          message: "Product quantity must be at least 1",
-        });
-      }
-
-      normalizedItems.push({
-        productId,
-        quantity: item.quantity,
-      });
-    }
-
-    // -------------------------------------------------
-    // PREVENT DUPLICATE PRODUCTS
-    // -------------------------------------------------
-
-    const productIdSet = new Set();
-
-    for (const item of normalizedItems) {
-      if (productIdSet.has(item.productId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Duplicate product found in order",
-        });
-      }
-
-      productIdSet.add(item.productId);
-    }
+    const normalizedItems = normalizeCheckoutItems(items);
 
     // -------------------------------------------------
     // START TRANSACTION
@@ -283,11 +238,7 @@ export const placeOrder = async (req, res) => {
           },
 
           update: {
-            $set: {
-              stock: newStock,
-
-              isActive: newStock > 0,
-            },
+            $inc: { stock: -item.quantity },
           },
         },
       });
@@ -347,6 +298,22 @@ export const placeOrder = async (req, res) => {
 
     await session.commitTransaction();
 
+    for (const item of normalizedItems) {
+      const product = productMap.get(item.productId);
+      const stock = product.stock - item.quantity;
+      emitToAdmins("inventory:updated", {
+        productId: product._id.toString(),
+        stock,
+        source: "order",
+        orderId: order._id.toString(),
+      });
+    }
+    emitToCustomer(userId, "order:status", {
+      orderId: order._id.toString(),
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+    });
+
     // -------------------------------------------------
     // CUSTOMER EMAIL
     // -------------------------------------------------
@@ -388,6 +355,12 @@ export const placeOrder = async (req, res) => {
       await session.abortTransaction();
     }
 
+    if (error instanceof CheckoutInputError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
     console.error("Place Order Error:", error);
 
     return res.status(500).json({
@@ -558,7 +531,6 @@ export const cancelOrder = async (req, res) => {
 
     const order = await Order.findOne({
       _id: orderId,
-
       user: userId,
     }).session(session);
 
@@ -569,6 +541,14 @@ export const cancelOrder = async (req, res) => {
         success: false,
 
         message: "Order not found",
+      });
+    }
+
+    if (order.paymentMethod === "ONLINE" && order.paymentStatus === "Paid") {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        message: "Paid online orders must be refunded through the return workflow.",
       });
     }
 
@@ -600,6 +580,23 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
+    const cancelledOrder = await Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        user: userId,
+        orderStatus: { $in: ["Pending", "Processing"] },
+      },
+      { $set: { orderStatus: "Cancelled" } },
+      { new: true, session },
+    );
+    if (!cancelledOrder) {
+      await session.abortTransaction();
+      return res.status(409).json({
+        success: false,
+        message: "Order status changed while cancellation was being processed.",
+      });
+    }
+
     // -------------------------------------------------
     // GET ORDER PRODUCTS
     // -------------------------------------------------
@@ -620,54 +617,40 @@ export const cancelOrder = async (req, res) => {
     // PREPARE STOCK RESTORATION
     // -------------------------------------------------
 
-    const bulkUpdates = [];
-
-    const inventoryLogs = [];
-
+    const quantities = new Map();
     for (const item of order.items) {
-      const product = productMap.get(item.product.toString());
+      const productId = item.product.toString();
+      quantities.set(productId, (quantities.get(productId) || 0) + item.quantity);
+    }
 
+    const bulkUpdates = [];
+    const inventoryLogs = [];
+    for (const [productId, quantity] of quantities) {
+      const product = productMap.get(productId);
       if (!product) {
         await session.abortTransaction();
-
         return res.status(404).json({
           success: false,
-
           message: "Product not found",
         });
       }
 
       const previousStock = product.stock;
-
-      const newStock = previousStock + item.quantity;
+      const newStock = previousStock + quantity;
 
       bulkUpdates.push({
         updateOne: {
-          filter: {
-            _id: product._id,
-          },
-
-          update: {
-            $set: {
-              stock: newStock,
-
-              isActive: newStock > 0,
-            },
-          },
+          filter: { _id: product._id },
+          update: { $inc: { stock: quantity } },
         },
       });
 
       inventoryLogs.push({
         product: product._id,
-
         previousStock,
-
         newStock,
-
-        quantityChanged: item.quantity,
-
+        quantityChanged: quantity,
         action: "Order Cancelled",
-
         updatedBy: userId,
       });
     }
@@ -692,17 +675,26 @@ export const cancelOrder = async (req, res) => {
     // UPDATE ORDER
     // -------------------------------------------------
 
-    order.orderStatus = "Cancelled";
-
-    await order.save({
-      session,
-    });
-
     // -------------------------------------------------
     // COMMIT
     // -------------------------------------------------
 
     await session.commitTransaction();
+
+    for (const [productId, quantity] of quantities) {
+      const product = productMap.get(productId);
+      emitToAdmins("inventory:updated", {
+        productId: product._id.toString(),
+        stock: product.stock + quantity,
+        source: "cancellation",
+        orderId: order._id.toString(),
+      });
+    }
+    emitToCustomer(userId, "order:status", {
+      orderId: order._id.toString(),
+      orderStatus: "Cancelled",
+      paymentStatus: order.paymentStatus,
+    });
 
     // -------------------------------------------------
     // CUSTOMER EMAIL
@@ -737,7 +729,7 @@ export const cancelOrder = async (req, res) => {
 
       message: "Order cancelled successfully",
 
-      order,
+      order: cancelledOrder,
     });
   } catch (error) {
     if (session.inTransaction()) {
@@ -910,7 +902,7 @@ export const updateOrderStatus = async (req, res) => {
     // FIND ORDER
     // -------------------------------------------------
 
-    const order = await Order.findById(orderId);
+    let order = await Order.findById(orderId);
 
     if (!order) {
       return res.status(404).json({
@@ -982,23 +974,167 @@ export const updateOrderStatus = async (req, res) => {
     // UPDATE ORDER STATUS
     // -------------------------------------------------
 
-    order.orderStatus = orderStatus;
+    if (orderStatus === "Cancelled") {
+      if (order.paymentMethod === "ONLINE" && order.paymentStatus === "Paid") {
+        return res.status(409).json({
+          success: false,
+          message: "Paid online orders must be refunded through the return workflow.",
+        });
+      }
 
-    // -------------------------------------------------
-    // RETURN ELIGIBILITY
-    // -------------------------------------------------
+      const session = await mongoose.startSession();
+      const inventoryChanges = [];
+      try {
+        session.startTransaction();
+        const cancelledOrder = await Order.findOneAndUpdate(
+          {
+            _id: order._id,
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+          },
+          { $set: { orderStatus: "Cancelled" } },
+          { new: true, session },
+        );
+        if (!cancelledOrder) {
+          await session.abortTransaction();
+          return res.status(409).json({
+            success: false,
+            message: "Order status changed while cancellation was being processed.",
+          });
+        }
 
-    if (orderStatus === "Delivered") {
-      order.returnEligibleUntil = new Date(
-        Date.now() + 7 * 24 * 60 * 60 * 1000,
-      );
+        const productIds = [...new Set(order.items.map((item) => item.product.toString()))];
+        const products = await Product.find({ _id: { $in: productIds } }).session(session);
+        const productMap = new Map(
+          products.map((product) => [product._id.toString(), product]),
+        );
+        const quantities = new Map();
+        for (const item of order.items) {
+          const productId = item.product.toString();
+          quantities.set(
+            productId,
+            (quantities.get(productId) || 0) + item.quantity,
+          );
+        }
+
+        const stockUpdates = [];
+        const inventoryLogs = [];
+        for (const [productId, quantity] of quantities) {
+          const product = productMap.get(productId);
+          if (!product) continue;
+          stockUpdates.push({
+            updateOne: {
+              filter: { _id: product._id },
+              update: { $inc: { stock: quantity } },
+            },
+          });
+          inventoryLogs.push({
+            product: product._id,
+            previousStock: product.stock,
+            newStock: product.stock + quantity,
+            quantityChanged: quantity,
+            action: "Order Cancelled",
+            updatedBy: req.user._id,
+          });
+          inventoryChanges.push({
+            productId: product._id.toString(),
+            stock: product.stock + quantity,
+          });
+        }
+        if (stockUpdates.length) {
+          await Product.bulkWrite(stockUpdates, { session });
+          await InventoryLog.insertMany(inventoryLogs, { session });
+        }
+        await session.commitTransaction();
+        order = cancelledOrder;
+      } catch (error) {
+        if (session.inTransaction()) await session.abortTransaction();
+        throw error;
+      } finally {
+        await session.endSession();
+      }
+
+      for (const change of inventoryChanges) {
+        emitToAdmins("inventory:updated", {
+          ...change,
+          source: "cancellation",
+          orderId: order._id.toString(),
+        });
+      }
+      emitToCustomer(order.user, "order:status", {
+        orderId: order._id.toString(),
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+      });
+      emitToAdmins("order:status", {
+        orderId: order._id.toString(),
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+      });
+
+      const customer = await User.findById(order.user).select("email fullName");
+      if (customer) {
+        try {
+          await sendOrderCancelledEmail(customer.email, customer.fullName, order._id);
+        } catch (error) {
+          console.error("Admin order cancellation email failed:", error);
+        }
+        try {
+          await notifyOrderCancelled(order, customer);
+        } catch (error) {
+          console.error("Admin order cancellation notification failed:", error);
+        }
+      }
+
+      const updatedOrder = await Order.findById(order._id)
+        .populate("user", "fullName email")
+        .populate("items.product", "name images price category brand stock")
+        .lean();
+      return res.status(200).json({
+        success: true,
+        message: "Order status updated successfully",
+        order: updatedOrder,
+      });
     }
 
-    // -------------------------------------------------
-    // SAVE
-    // -------------------------------------------------
+    const previousPaymentStatus = order.paymentStatus;
+    const updates = { orderStatus };
+    if (orderStatus === "Delivered") {
+      updates.returnEligibleUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      if (order.paymentMethod === "COD") updates.paymentStatus = "Paid";
+    }
+    const updatedStatusOrder = await Order.findOneAndUpdate(
+      { _id: order._id, orderStatus: order.orderStatus },
+      { $set: updates },
+      { new: true },
+    );
+    if (!updatedStatusOrder) {
+      return res.status(409).json({
+        success: false,
+        message: "Order status changed while the update was being processed.",
+      });
+    }
+    order = updatedStatusOrder;
 
-    await order.save();
+    if (previousPaymentStatus !== order.paymentStatus) {
+      const paymentEvent = {
+        orderId: order._id.toString(),
+        status: order.paymentStatus,
+      };
+      emitToCustomer(order.user, "payment:status", paymentEvent);
+      emitToAdmins("payment:status", paymentEvent);
+    }
+
+    emitToCustomer(order.user, "order:status", {
+      orderId: order._id.toString(),
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+    });
+    emitToAdmins("order:status", {
+      orderId: order._id.toString(),
+      orderStatus: order.orderStatus,
+      paymentStatus: order.paymentStatus,
+    });
 
     // -------------------------------------------------
     // CUSTOMER NOTIFICATIONS

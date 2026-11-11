@@ -36,9 +36,24 @@ const userSchema = new mongoose.Schema(
     // Password
     password: {
       type: String,
-      required: [true, "Password is required"],
+      required: function () {
+        return !this.googleId;
+      },
       minlength: [6, "Password must be at least 6 characters"],
       select: false,
+    },
+
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      select: false,
+    },
+
+    authProvider: {
+      type: String,
+      enum: ["password", "google", "mixed"],
+      default: "password",
     },
 
     // User role
@@ -87,6 +102,9 @@ userSchema.pre("save", async function () {
 
 // Compare entered password with hashed password
 userSchema.methods.comparePassword = async function (enteredPassword) {
+  if (!this.password) {
+    return false;
+  }
   return bcrypt.compare(enteredPassword, this.password);
 };
 

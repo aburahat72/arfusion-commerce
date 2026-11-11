@@ -5,6 +5,12 @@ import razorpay from "../config/razorpay.js";
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import PaymentIntent from "../models/paymentIntent.model.js";
+import InventoryLog from "../models/inventoryLog.model.js";
+import {
+  CheckoutInputError,
+  normalizeCheckoutItems,
+} from "../utils/checkoutItems.js";
+import { emitToAdmins, emitToCustomer } from "../realtime/socket.server.js";
 
 import { sendPaymentSuccessEmail } from "../services/email.services.js";
 
@@ -74,31 +80,7 @@ export const createPaymentOrder = async (req, res) => {
      * =====================================================
      */
 
-    const normalizedItems = [];
-
-    for (const item of items) {
-      const productId = item?.product;
-      const quantity = Number(item?.quantity);
-
-      if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid product ID.",
-        });
-      }
-
-      if (!Number.isInteger(quantity) || quantity < 1) {
-        return res.status(400).json({
-          success: false,
-          message: "Product quantity must be at least 1.",
-        });
-      }
-
-      normalizedItems.push({
-        product: new mongoose.Types.ObjectId(productId),
-        quantity,
-      });
-    }
+    const normalizedItems = normalizeCheckoutItems(items);
 
     /*
      * =====================================================
@@ -125,13 +107,13 @@ export const createPaymentOrder = async (req, res) => {
 
     for (const item of normalizedItems) {
       const product = await Product.findOne({
-        _id: item.product,
+        _id: new mongoose.Types.ObjectId(item.productId),
       }).lean();
 
       if (!product) {
         return res.status(400).json({
           success: false,
-          message: `Product ${item.product.toString()} was not found.`,
+          message: `Product ${item.productId} was not found.`,
         });
       }
 
@@ -152,7 +134,7 @@ export const createPaymentOrder = async (req, res) => {
 
     for (const item of normalizedItems) {
       const product = products.find(
-        (productItem) => productItem._id.toString() === item.product.toString(),
+        (productItem) => productItem._id.toString() === item.productId,
       );
 
       if (!product) {
@@ -344,6 +326,13 @@ export const createPaymentOrder = async (req, res) => {
   } catch (error) {
     console.error("Create Payment Error:", error);
 
+    if (error instanceof CheckoutInputError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: error?.message || "Unable to create payment order.",
@@ -376,6 +365,8 @@ export const createPaymentOrder = async (req, res) => {
  */
 export const verifyPayment = async (req, res) => {
   const session = await mongoose.startSession();
+  let recoveryPaymentIntentId;
+  let recoveryPaymentId;
 
   try {
     const userId = req.user._id;
@@ -389,7 +380,14 @@ export const verifyPayment = async (req, res) => {
      * =====================================================
      */
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (
+      typeof razorpay_order_id !== "string" ||
+      typeof razorpay_payment_id !== "string" ||
+      typeof razorpay_signature !== "string" ||
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
       return res.status(400).json({
         success: false,
         message: "Razorpay payment details are required.",
@@ -407,7 +405,12 @@ export const verifyPayment = async (req, res) => {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
+    const suppliedSignature = Buffer.from(razorpay_signature, "hex");
+    const expectedSignature = Buffer.from(generatedSignature, "hex");
+    if (
+      suppliedSignature.length !== expectedSignature.length ||
+      !crypto.timingSafeEqual(suppliedSignature, expectedSignature)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid Razorpay payment signature.",
@@ -449,6 +452,8 @@ export const verifyPayment = async (req, res) => {
     }
 
     const paymentIntentId = receipt.substring(3);
+    recoveryPaymentIntentId = paymentIntentId;
+    recoveryPaymentId = razorpay_payment_id;
 
     if (!mongoose.Types.ObjectId.isValid(paymentIntentId)) {
       return res.status(400).json({
@@ -485,6 +490,12 @@ export const verifyPayment = async (req, res) => {
      */
 
     if (paymentIntent.status === "Paid") {
+      if (paymentIntent.paymentId !== razorpay_payment_id) {
+        return res.status(409).json({
+          success: false,
+          message: "This payment intent was completed with a different payment.",
+        });
+      }
       const existingOrder = paymentIntent.order
         ? await Order.findOne({
             _id: paymentIntent.order,
@@ -547,6 +558,19 @@ export const verifyPayment = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Razorpay payment has not been completed.",
+      });
+    }
+
+    const razorpayPayment = await razorpay.payments.fetch(razorpay_payment_id);
+    if (
+      razorpayPayment.order_id !== razorpay_order_id ||
+      razorpayPayment.status !== "captured" ||
+      Number(razorpayPayment.amount) !== expectedAmount ||
+      razorpayPayment.currency !== razorpayOrder.currency
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "The Razorpay payment is not a captured payment for this order.",
       });
     }
 
@@ -618,9 +642,11 @@ export const verifyPayment = async (req, res) => {
        */
 
       if (product.isActive === false) {
-        throw new Error(
+        const conflict = new Error(
           `${product.name || "A product"} is no longer available.`,
         );
+        conflict.statusCode = 409;
+        throw conflict;
       }
 
       /*
@@ -630,9 +656,11 @@ export const verifyPayment = async (req, res) => {
        */
 
       if (Number(product.stock) < Number(item.quantity)) {
-        throw new Error(
+        const conflict = new Error(
           `Insufficient stock for ${product.name || "a product"}.`,
         );
+        conflict.statusCode = 409;
+        throw conflict;
       }
     }
 
@@ -652,10 +680,33 @@ export const verifyPayment = async (req, res) => {
      * 4. Stock verified
      */
 
+    const claimResult = await PaymentIntent.updateOne(
+      {
+        _id: paymentIntent._id,
+        user: userId,
+        status: "Created",
+        order: null,
+      },
+      {
+        $set: {
+          status: "Paid",
+          paymentId: razorpay_payment_id,
+        },
+      },
+      { session },
+    );
+    if (claimResult.modifiedCount !== 1) {
+      const conflict = new Error("This payment is already being processed.");
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+
     const [createdOrder] = await Order.create(
       [
         {
           user: userId,
+
+          paymentIntent: paymentIntent._id,
 
           items: paymentIntent.items.map((item) => ({
             product: item.product,
@@ -678,6 +729,8 @@ export const verifyPayment = async (req, res) => {
           paymentStatus: "Paid",
 
           orderStatus: "Processing",
+
+          razorpayPaymentId: razorpay_payment_id,
         },
       ],
       {
@@ -691,6 +744,8 @@ export const verifyPayment = async (req, res) => {
      * =====================================================
      */
 
+    const inventoryLogs = [];
+    const stockUpdates = [];
     for (const item of paymentIntent.items) {
       const product = products.find(
         (productItem) => productItem._id.toString() === item.product.toString(),
@@ -700,22 +755,37 @@ export const verifyPayment = async (req, res) => {
         throw new Error("Unable to update product stock.");
       }
 
-      product.stock = Number(product.stock) - Number(item.quantity);
-
-      /*
-       * If stock reaches zero,
-       * deactivate product.
-       */
-
-      if (product.stock <= 0) {
-        product.stock = 0;
-        product.isActive = false;
-      }
-
-      await product.save({
-        session,
+      const previousStock = Number(product.stock);
+      stockUpdates.push({
+        updateOne: {
+          filter: {
+            _id: product._id,
+            isActive: true,
+            stock: { $gte: item.quantity },
+          },
+          update: { $inc: { stock: -item.quantity } },
+        },
+      });
+      inventoryLogs.push({
+        product: product._id,
+        previousStock,
+        newStock: previousStock - item.quantity,
+        quantityChanged: item.quantity,
+        action: "Order Placed",
+        updatedBy: userId,
       });
     }
+
+    const stockResult = await Product.bulkWrite(stockUpdates, { session });
+    if (stockResult.modifiedCount !== stockUpdates.length) {
+      const conflict = new Error(
+        "Stock changed during payment verification. Contact support with your payment reference.",
+      );
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+
+    await InventoryLog.insertMany(inventoryLogs, { session });
 
     /*
      * =====================================================
@@ -723,15 +793,19 @@ export const verifyPayment = async (req, res) => {
      * =====================================================
      */
 
-    paymentIntent.status = "Paid";
-
-    paymentIntent.paymentId = razorpay_payment_id;
-
-    paymentIntent.order = createdOrder._id;
-
-    await paymentIntent.save({
-      session,
-    });
+    const linkedIntent = await PaymentIntent.updateOne(
+      {
+        _id: paymentIntent._id,
+        status: "Paid",
+        paymentId: razorpay_payment_id,
+        order: null,
+      },
+      { $set: { order: createdOrder._id } },
+      { session },
+    );
+    if (linkedIntent.modifiedCount !== 1) {
+      throw new Error("Unable to link the verified payment to its order.");
+    }
 
     /*
      * =====================================================
@@ -740,6 +814,33 @@ export const verifyPayment = async (req, res) => {
      */
 
     await session.commitTransaction();
+
+    emitToCustomer(userId, "payment:status", {
+      paymentIntentId: paymentIntent._id.toString(),
+      status: "Paid",
+      orderId: createdOrder._id.toString(),
+    });
+    emitToCustomer(userId, "order:status", {
+      orderId: createdOrder._id.toString(),
+      orderStatus: createdOrder.orderStatus,
+      paymentStatus: createdOrder.paymentStatus,
+    });
+    emitToAdmins("payment:status", {
+      paymentIntentId: paymentIntent._id.toString(),
+      status: "Paid",
+      orderId: createdOrder._id.toString(),
+    });
+    for (const item of paymentIntent.items) {
+      const product = products.find(
+        (productItem) => productItem._id.toString() === item.product.toString(),
+      );
+      emitToAdmins("inventory:updated", {
+        productId: product._id.toString(),
+        stock: Number(product.stock) - item.quantity,
+        source: "order",
+        orderId: createdOrder._id.toString(),
+      });
+    }
 
     /*
      * =====================================================
@@ -782,9 +883,38 @@ export const verifyPayment = async (req, res) => {
 
     console.error("Verify Payment Error:", error);
 
-    return res.status(500).json({
+    if (recoveryPaymentIntentId && recoveryPaymentId) {
+      try {
+        const recoveredIntent = await PaymentIntent.findOne({
+          _id: recoveryPaymentIntentId,
+          user: req.user._id,
+          status: "Paid",
+          paymentId: recoveryPaymentId,
+        });
+        if (recoveredIntent?.order) {
+          const recoveredOrder = await Order.findOne({
+            _id: recoveredIntent.order,
+            user: req.user._id,
+            paymentIntent: recoveredIntent._id,
+          });
+          if (recoveredOrder) {
+            return res.status(200).json({
+              success: true,
+              message: "Payment was already verified.",
+              order: recoveredOrder,
+            });
+          }
+        }
+      } catch (recoveryError) {
+        console.error("Payment idempotency recovery failed:", recoveryError);
+      }
+    }
+
+    return res.status(error.statusCode || 500).json({
       success: false,
-      message: error?.message || "Payment verification failed.",
+      message: error.statusCode
+        ? error.message
+        : "Payment verification failed.",
     });
   } finally {
     await session.endSession();
@@ -867,6 +997,46 @@ export const updatePaymentStatus = async (req, res) => {
       });
     }
 
+    let remoteOrder;
+    let remotePayments;
+    try {
+      [remoteOrder, remotePayments] = await Promise.all([
+        razorpay.orders.fetch(paymentIntent.razorpayOrderId),
+        razorpay.orders.fetchPayments(paymentIntent.razorpayOrderId),
+      ]);
+    } catch (error) {
+      console.error("Razorpay status reconciliation failed:", error);
+      return res.status(502).json({
+        success: false,
+        message: "Unable to verify payment status with Razorpay. Try again.",
+      });
+    }
+
+    const paymentAttempts = Array.isArray(remotePayments?.items)
+      ? remotePayments.items
+      : [];
+    const capturedPayment = paymentAttempts.find(
+      (payment) => payment.status === "captured",
+    );
+    const pendingPayment = paymentAttempts.find((payment) =>
+      ["created", "authorized"].includes(payment.status),
+    );
+
+    if (remoteOrder.status === "paid" || capturedPayment) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Razorpay reports a successful payment. Complete payment verification before changing its status.",
+      });
+    }
+    if (pendingPayment) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Razorpay still has a pending payment attempt. Its status cannot be changed yet.",
+      });
+    }
+
     /*
      * =====================================================
      * ALREADY FAILED / CANCELLED
@@ -890,9 +1060,47 @@ export const updatePaymentStatus = async (req, res) => {
      * =====================================================
      */
 
-    paymentIntent.status = status;
-
-    await paymentIntent.save();
+    const updatedIntent = await PaymentIntent.findOneAndUpdate(
+      {
+        _id: paymentIntentId,
+        user: userId,
+        status: "Created",
+        order: null,
+      },
+      { $set: { status } },
+      { new: true },
+    );
+    if (!updatedIntent) {
+      const currentIntent = await PaymentIntent.findOne({
+        _id: paymentIntentId,
+        user: userId,
+      });
+      if (currentIntent?.status === "Paid") {
+        return res.status(409).json({
+          success: false,
+          message: "The payment was verified concurrently and cannot be changed.",
+        });
+      }
+      if (currentIntent?.status === status) {
+        return res.status(200).json({
+          success: true,
+          message: "Payment status was already updated.",
+          paymentIntent: currentIntent,
+        });
+      }
+      return res.status(409).json({
+        success: false,
+        message: "Payment status changed while this request was processed.",
+      });
+    }
+    emitToCustomer(userId, "payment:status", {
+      paymentIntentId: updatedIntent._id.toString(),
+      status: updatedIntent.status,
+    });
+    emitToAdmins("payment:status", {
+      paymentIntentId: updatedIntent._id.toString(),
+      status: updatedIntent.status,
+    });
 
     /*
      * =====================================================
@@ -905,7 +1113,7 @@ export const updatePaymentStatus = async (req, res) => {
 
       message: `Payment marked as ${status}.`,
 
-      paymentIntent,
+      paymentIntent: updatedIntent,
     });
   } catch (error) {
     console.error("Update Payment Status Error:", error);

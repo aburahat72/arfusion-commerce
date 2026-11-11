@@ -103,7 +103,7 @@ const paymentIntentSchema = new mongoose.Schema(
      */
     status: {
       type: String,
-      enum: ["Created", "Paid", "Failed", "Cancelled"],
+      enum: ["Created", "Paid", "Refunded", "Failed", "Cancelled"],
       default: "Created",
       index: true,
     },

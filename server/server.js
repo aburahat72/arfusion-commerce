@@ -3,6 +3,7 @@ import cors from "cors";
 import compression from "compression";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import { createServer } from "node:http";
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ import returnRoutes from "./src/routes/return.routes.js";
 import inventoryRoutes from "./src/routes/inventory.routes.js";
 import notificationRoutes from "./src/routes/notification.routes.js";
 import dealOfTheDayRoutes from "./src/routes/dealOfTheDay.routes.js";
+import { initializeSocket } from "./src/realtime/socket.server.js";
 
 const app = express();
 
@@ -46,23 +48,25 @@ app.use(helmet());
 // CORS
 // =====================================================
 
-// CORS configuration
-// Allows the frontend application to communicate with this backend.
-// The allowed frontend URL is stored in the environment variables.
-// app.use(
-//   cors({
-//     origin: process.env.CLIENT_URL,
-//     credentials: true,
-//   }),
-// );
-
-// temporary
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  }),
+const allowedOrigins = new Set(
+  [process.env.CLIENT_URL, process.env.CORS_ORIGINS]
+    .filter(Boolean)
+    .flatMap((value) => value.split(","))
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 );
+if (allowedOrigins.size === 0) {
+  allowedOrigins.add("http://localhost:5173");
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    callback(null, !origin || allowedOrigins.has(origin));
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 
 // =====================================================
 // Body parsers
@@ -160,12 +164,14 @@ app.get("/", (req, res) => {
 // =====================================================
 
 const PORT = process.env.PORT || 3000;
+const httpServer = createServer(app);
+initializeSocket(httpServer, corsOptions);
 
 const startServer = async () => {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
     });
   } catch (error) {

@@ -7,18 +7,65 @@ import {
   Search,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-import products from "../../../data/products";
+import { getAdminInventory } from "../../../services/adminApi";
 
 function AdminInventory() {
   const navigate = useNavigate();
 
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState("All");
 
   const stockOptions = ["All", "In Stock", "Low Stock", "Out of Stock"];
+
+  useEffect(() => {
+    let active = true;
+    const loadInventory = async () => {
+      try {
+        setLoading(true);
+        const response = await getAdminInventory();
+        if (!response?.success) {
+          throw new Error(response?.message || "Unable to load inventory.");
+        }
+        if (active) setProducts(response.products || []);
+      } catch (requestError) {
+        if (active) {
+          setError(
+            requestError.response?.data?.message ||
+              requestError.message ||
+              "Unable to load inventory.",
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadInventory();
+
+    const handleInventoryUpdate = (event) => {
+      const { productId, stock } = event.detail || {};
+      if (!productId || !Number.isFinite(Number(stock))) return;
+      setProducts((current) =>
+        current.map((product) =>
+          product._id === productId
+            ? { ...product, stock: Number(stock) }
+            : product,
+        ),
+      );
+    };
+    window.addEventListener("arfusion:inventory:updated", handleInventoryUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener(
+        "arfusion:inventory:updated",
+        handleInventoryUpdate,
+      );
+    };
+  }, []);
 
   /* =====================================================
      FILTER PRODUCTS
@@ -52,7 +99,7 @@ function AdminInventory() {
 
       return matchesSearch && matchesStock;
     });
-  }, [search, stockFilter]);
+  }, [products, search, stockFilter]);
 
   /* =====================================================
      INVENTORY SUMMARY
@@ -87,7 +134,7 @@ function AdminInventory() {
       outOfStock,
       units,
     };
-  }, []);
+  }, [products]);
 
   /* =====================================================
      UPDATE STOCK
@@ -120,9 +167,24 @@ function AdminInventory() {
               </h1>
 
               <p className="mt-1 text-sm text-text-secondary">
-                Monitor stock levels and identify products that need attention.
+                Live stock levels from the product catalog.
               </p>
             </div>
+
+            {error && (
+              <div
+                role="alert"
+                className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {error}
+              </div>
+            )}
+
+            {loading && (
+              <div className="mb-5 rounded-xl bg-surface p-4 text-sm text-text-secondary">
+                Loading inventory...
+              </div>
+            )}
 
             <div className="text-sm text-text-secondary">
               {filteredProducts.length}{" "}

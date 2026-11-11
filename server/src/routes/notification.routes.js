@@ -31,6 +31,13 @@ router.get(
   getNotifications,
 );
 
+router.get(
+  "/unread-count",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getUnreadCount,
+);
+
 // Customer Routes
 
 // Get logged-in customer's notifications
