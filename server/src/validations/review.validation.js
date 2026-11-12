@@ -1,34 +1,17 @@
 import { z } from "zod";
 
-// Add Review
+const objectIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f\d]{24}$/i, "A valid ID is required");
+
 export const addReviewSchema = z.object({
-  productId: z.string().trim().min(1, "Product ID is required"),
-
-  rating: z
-    .number({
-      required_error: "Rating is required",
-    })
-    .min(1, "Rating must be at least 1")
-    .max(5, "Rating cannot be greater than 5"),
-
-  comment: z
-    .string()
-    .trim()
-    .max(1000, "Comment cannot exceed 1000 characters")
-    .optional(),
+  orderId: objectIdSchema,
+  productId: objectIdSchema,
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(5).max(1000),
 });
 
-// Update Review
-export const updateReviewSchema = z.object({
-  rating: z
-    .number()
-    .min(1, "Rating must be at least 1")
-    .max(5, "Rating cannot be greater than 5")
-    .optional(),
-
-  comment: z
-    .string()
-    .trim()
-    .max(1000, "Comment cannot exceed 1000 characters")
-    .optional(),
+export const reviewStatusSchema = z.object({
+  status: z.enum(["pending", "approved", "rejected", "removed"]),
 });

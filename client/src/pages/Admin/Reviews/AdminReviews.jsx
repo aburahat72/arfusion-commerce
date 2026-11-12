@@ -1,364 +1,298 @@
 import {
-  CheckCircle2,
-  Eye,
-  MessageSquare,
+  BadgeCheck,
+  Check,
+  ChevronLeft,
+  ChevronRight,
   Search,
   Star,
   Trash2,
-  XCircle,
+  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  getAdminReviews,
+  updateAdminReviewStatus,
+} from "../../../services/adminApi";
 
-const reviews = [
-  {
-    id: "REV-1001",
-    customer: "John Doe",
-    product: "Wireless Headphones",
-    rating: 5,
-    title: "Excellent product",
-    comment:
-      "The sound quality is excellent and the battery lasts a long time.",
-    status: "Published",
-    date: "24 Aug 2026",
-  },
-  {
-    id: "REV-1002",
-    customer: "Emily Johnson",
-    product: "Smart Watch",
-    rating: 4,
-    title: "Very useful",
-    comment: "Good watch with a clean interface and useful health features.",
-    status: "Published",
-    date: "23 Aug 2026",
-  },
-  {
-    id: "REV-1003",
-    customer: "Michael Smith",
-    product: "Running Shoes",
-    rating: 5,
-    title: "Very comfortable",
-    comment:
-      "Comfortable for long walks and running. Good quality for the price.",
-    status: "Pending",
-    date: "22 Aug 2026",
-  },
-  {
-    id: "REV-1004",
-    customer: "Sarah Williams",
-    product: "Travel Backpack",
-    rating: 3,
-    title: "Average",
-    comment: "The design is good but I expected slightly better material.",
-    status: "Pending",
-    date: "21 Aug 2026",
-  },
-  {
-    id: "REV-1005",
-    customer: "David Brown",
-    product: "Bluetooth Speaker",
-    rating: 1,
-    title: "Not satisfied",
-    comment: "The speaker stopped working after a few days.",
-    status: "Rejected",
-    date: "20 Aug 2026",
-  },
-];
+const initialSummary = {
+  total: 0,
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+  removed: 0,
+  averageRating: 0,
+};
 
 function AdminReviews() {
-  const navigate = useNavigate();
-
+  const [reviews, setReviews] = useState([]);
+  const [summary, setSummary] = useState(initialSummary);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    total: 0,
+    totalPages: 0,
+  });
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All");
-  const [rating, setRating] = useState("All");
+  const [status, setStatus] = useState("all");
+  const [rating, setRating] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [updatingId, setUpdatingId] = useState("");
+  const [refresh, setRefresh] = useState(0);
 
-  const filteredReviews = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      setError("");
 
-    return reviews.filter((review) => {
-      const matchesSearch =
-        !query ||
-        review.customer.toLowerCase().includes(query) ||
-        review.product.toLowerCase().includes(query) ||
-        review.title.toLowerCase().includes(query) ||
-        review.id.toLowerCase().includes(query);
+      try {
+        const response = await getAdminReviews({
+          page: pagination.page,
+          limit: 15,
+          search,
+          status,
+          rating,
+        });
+        if (!active) return;
+        const data = response.data;
+        setReviews(data.reviews || []);
+        setSummary(data.summary || initialSummary);
+        setPagination((current) => ({
+          ...current,
+          ...data.pagination,
+        }));
+      } catch (requestError) {
+        if (!active) return;
+        setError(
+          requestError?.response?.data?.message || "Unable to load reviews.",
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, search ? 250 : 0);
 
-      const matchesStatus = status === "All" || review.status === status;
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [pagination.page, search, status, rating, refresh]);
 
-      const matchesRating =
-        rating === "All" || review.rating === Number(rating);
-
-      return matchesSearch && matchesStatus && matchesRating;
-    });
-  }, [search, status, rating]);
-
-  const publishedCount = reviews.filter(
-    (review) => review.status === "Published",
-  ).length;
-
-  const pendingCount = reviews.filter(
-    (review) => review.status === "Pending",
-  ).length;
-
-  const rejectedCount = reviews.filter(
-    (review) => review.status === "Rejected",
-  ).length;
-
-  const averageRating =
-    reviews.length > 0
-      ? (
-          reviews.reduce((sum, review) => sum + review.rating, 0) /
-          reviews.length
-        ).toFixed(1)
-      : "0.0";
-
-  const handleView = (review) => {
-    navigate(`/admin/reviews/${review.id}`);
+  const changeFilter = (setter, value) => {
+    setPagination((current) => ({ ...current, page: 1 }));
+    setter(value);
   };
+
+  const moderateReview = async (reviewId, nextStatus) => {
+    setUpdatingId(reviewId);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await updateAdminReviewStatus(reviewId, nextStatus);
+      setNotice(response.data.message || "Review moderation updated.");
+      setRefresh((current) => current + 1);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message ||
+          "Unable to update this review.",
+      );
+    } finally {
+      setUpdatingId("");
+    }
+  };
+
+  const formatDate = (date) =>
+    date
+      ? new Date(date).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })
+      : "—";
 
   return (
     <main className="min-h-[calc(100vh-5rem)] bg-background p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1600px]">
-        {/* =================================================
-            HEADER
-        ================================================= */}
-
-        <div className="mb-6">
+        <header className="mb-6">
           <p className="text-sm text-text-secondary">Sales</p>
-
-          <div className="mt-1 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-                Reviews
-              </h1>
-
-              <p className="mt-1 text-sm text-text-secondary">
-                Moderate customer reviews and manage product feedback.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* =================================================
-            SUMMARY
-        ================================================= */}
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text sm:text-3xl">
+            Reviews
+          </h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            Moderate verified customer feedback before it is shown publicly.
+          </p>
+        </header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <ReviewStat
-            title="Total Reviews"
-            value={reviews.length}
-            icon={<MessageSquare size={20} />}
-            iconClass="bg-primary-container text-primary"
-          />
-
-          <ReviewStat
-            title="Published"
-            value={publishedCount}
-            icon={<CheckCircle2 size={20} />}
-            iconClass="bg-success/10 text-success"
-          />
-
-          <ReviewStat
-            title="Pending"
-            value={pendingCount}
-            icon={<MessageSquare size={20} />}
-            iconClass="bg-warning/10 text-warning"
-          />
-
-          <ReviewStat
-            title="Average Rating"
-            value={`${averageRating}/5`}
-            icon={<Star size={20} />}
-            iconClass="bg-orange-100 text-orange-600"
+          <SummaryCard label="All reviews" value={summary.total} />
+          <SummaryCard label="Awaiting moderation" value={summary.pending} />
+          <SummaryCard label="Published" value={summary.approved} />
+          <SummaryCard
+            label="Published average"
+            value={`${Number(summary.averageRating).toFixed(1)} / 5`}
           />
         </section>
 
-        {/* =================================================
-            FILTERS
-        ================================================= */}
+        <section className="mt-6 grid gap-3 rounded-2xl border border-outline-variant bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_180px_150px]">
+          <label className="relative">
+            <span className="sr-only">Search reviews</span>
+            <Search
+              size={17}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-secondary"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => changeFilter(setSearch, event.target.value)}
+              placeholder="Search customer, product, or review..."
+              className="h-11 w-full rounded-xl border border-outline-variant bg-surface pl-10 pr-4 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+            />
+          </label>
 
-        <section className="mt-6 rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm sm:p-5">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
-            {/* Search */}
-
-            <div className="relative">
-              <Search
-                size={17}
-                className="
-                  pointer-events-none
-                  absolute
-                  left-3.5
-                  top-1/2
-                  -translate-y-1/2
-                  text-text-secondary
-                "
-              />
-
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search customer, product, title or review ID..."
-                className="
-                  h-11
-                  w-full
-                  rounded-xl
-                  border
-                  border-outline-variant
-                  bg-surface
-                  pl-10
-                  pr-4
-                  text-sm
-                  text-text
-                  outline-none
-                  transition
-                  placeholder:text-text-secondary
-                  hover:border-outline
-                  focus:border-primary
-                  focus:ring-2
-                  focus:ring-primary/15
-                "
-              />
-            </div>
-
-            {/* Status */}
-
+          <label>
+            <span className="sr-only">Filter by moderation status</span>
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
-              className="
-                h-11
-                rounded-xl
-                border
-                border-outline-variant
-                bg-surface
-                px-3
-                text-sm
-                text-text
-                outline-none
-                transition
-                focus:border-primary
-                focus:ring-2
-                focus:ring-primary/15
-              "
+              onChange={(event) => changeFilter(setStatus, event.target.value)}
+              className="h-11 w-full rounded-xl border border-outline-variant bg-surface px-3 text-sm text-text outline-none focus:border-primary"
             >
-              <option value="All">All Statuses</option>
-              <option value="Published">Published</option>
-              <option value="Pending">Pending</option>
-              <option value="Rejected">Rejected</option>
+              <option value="all">All statuses</option>
+              <option value="pending">Awaiting moderation</option>
+              <option value="approved">Published</option>
+              <option value="rejected">Rejected</option>
+              <option value="removed">Removed</option>
             </select>
+          </label>
 
-            {/* Rating */}
-
+          <label>
+            <span className="sr-only">Filter by rating</span>
             <select
               value={rating}
-              onChange={(event) => setRating(event.target.value)}
-              className="
-                h-11
-                rounded-xl
-                border
-                border-outline-variant
-                bg-surface
-                px-3
-                text-sm
-                text-text
-                outline-none
-                transition
-                focus:border-primary
-                focus:ring-2
-                focus:ring-primary/15
-              "
+              onChange={(event) => changeFilter(setRating, event.target.value)}
+              className="h-11 w-full rounded-xl border border-outline-variant bg-surface px-3 text-sm text-text outline-none focus:border-primary"
             >
-              <option value="All">All Ratings</option>
-              <option value="5">5 Stars</option>
-              <option value="4">4 Stars</option>
-              <option value="3">3 Stars</option>
-              <option value="2">2 Stars</option>
-              <option value="1">1 Star</option>
+              <option value="all">All ratings</option>
+              {[5, 4, 3, 2, 1].map((value) => (
+                <option key={value} value={value}>
+                  {value} {value === 1 ? "star" : "stars"}
+                </option>
+              ))}
             </select>
-          </div>
+          </label>
         </section>
 
-        {/* =================================================
-            RESULT COUNT
-        ================================================= */}
-
-        <div className="mt-5">
-          <p className="text-sm text-text-secondary">
-            Showing{" "}
-            <span className="font-semibold text-text">
-              {filteredReviews.length}
-            </span>{" "}
-            reviews
+        {notice && (
+          <p role="status" className="mt-4 rounded-xl bg-success/10 px-4 py-3 text-sm text-success">
+            {notice}
           </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-4 rounded-xl bg-error/10 px-4 py-3 text-sm text-error">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <p className="text-sm text-text-secondary">
+            {loading ? "Loading reviews..." : `${pagination.total} reviews`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={pagination.page <= 1 || loading}
+              onClick={() =>
+                setPagination((current) => ({ ...current, page: current.page - 1 }))
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-outline-variant text-text disabled:opacity-40"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <span className="text-xs text-text-secondary">
+              Page {pagination.page} of {pagination.totalPages || 1}
+            </span>
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={
+                pagination.page >= pagination.totalPages || loading
+              }
+              onClick={() =>
+                setPagination((current) => ({ ...current, page: current.page + 1 }))
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-outline-variant text-text disabled:opacity-40"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
         </div>
 
-        {/* =================================================
-            DESKTOP TABLE
-        ================================================= */}
-
-        <section className="mt-4 hidden overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-sm md:block">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] border-collapse">
-              <thead>
-                <tr className="border-b border-outline-variant bg-surface-container/60">
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Customer
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Product
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Rating
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Review
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Status
-                  </th>
-
-                  <th className="px-5 py-4 text-left text-xs font-semibold text-text-secondary">
-                    Date
-                  </th>
-
-                  <th className="px-5 py-4 text-right text-xs font-semibold text-text-secondary">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filteredReviews.map((review) => (
-                  <ReviewRow
-                    key={review.id}
+        <section className="mt-3 overflow-hidden rounded-2xl border border-outline-variant bg-surface shadow-sm">
+          {loading && reviews.length === 0 ? (
+            <p className="p-10 text-center text-sm text-text-secondary">
+              Loading reviews...
+            </p>
+          ) : reviews.length === 0 ? (
+            <p className="p-10 text-center text-sm text-text-secondary">
+              {error ? "Reviews could not be loaded." : "No reviews match these filters."}
+            </p>
+          ) : (
+            <div className="divide-y divide-outline-variant">
+              {reviews.map((review) => (
+                <article
+                  key={review._id}
+                  className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <h2 className="text-sm font-semibold text-text">
+                        {review.user?.fullName || "Deleted customer"}
+                      </h2>
+                      <ReviewStatus status={review.status} />
+                      {review.verifiedPurchase && (
+                        <span className="inline-flex items-center gap-1 text-xs text-success">
+                          <BadgeCheck size={14} /> Verified purchase
+                        </span>
+                      )}
+                      {!review.verifiedPurchase && (
+                        <span className="text-xs text-warning">
+                          Legacy review without order verification
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-text-secondary">
+                      {review.product?.name || "Deleted product"} ·{" "}
+                      {formatDate(review.createdAt)} · Order{" "}
+                      {review.order?._id || "unavailable"}
+                    </p>
+                    <div
+                      className="mt-3 flex items-center gap-0.5"
+                      aria-label={`${review.rating} out of 5 stars`}
+                    >
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <Star
+                          key={value}
+                          size={15}
+                          className={
+                            value <= review.rating
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-outline-variant"
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-text-secondary">
+                      {review.comment}
+                    </p>
+                  </div>
+                  <ReviewActions
                     review={review}
-                    onView={handleView}
+                    disabled={updatingId === review._id}
+                    onModerate={moderateReview}
                   />
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredReviews.length === 0 && <EmptyReviews />}
-        </section>
-
-        {/* =================================================
-            MOBILE
-        ================================================= */}
-
-        <section className="mt-4 space-y-3 md:hidden">
-          {filteredReviews.map((review) => (
-            <ReviewCard key={review.id} review={review} onView={handleView} />
-          ))}
-
-          {filteredReviews.length === 0 && (
-            <div className="rounded-2xl border border-outline-variant bg-surface p-8">
-              <EmptyReviews />
+                </article>
+              ))}
             </div>
           )}
         </section>
@@ -367,258 +301,75 @@ function AdminReviews() {
   );
 }
 
-/* =========================================================
-   STAT
-========================================================= */
-
-function ReviewStat({ title, value, icon, iconClass }) {
+function SummaryCard({ label, value }) {
   return (
     <article className="rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm">
-      <div className="flex items-center gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
-        >
-          {icon}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-xs text-text-secondary">{title}</p>
-
-          <p className="mt-1 truncate text-xl font-semibold text-text sm:text-2xl">
-            {value}
-          </p>
-        </div>
-      </div>
+      <p className="text-xs text-text-secondary">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-text">{value}</p>
     </article>
   );
 }
-
-/* =========================================================
-   DESKTOP ROW
-========================================================= */
-
-function ReviewRow({ review, onView }) {
-  return (
-    <tr className="border-b border-outline-variant last:border-0">
-      <td className="px-5 py-4">
-        <div className="flex items-center gap-3">
-          <Avatar name={review.customer} />
-
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-text">
-              {review.customer}
-            </p>
-
-            <p className="mt-0.5 text-xs text-text-secondary">{review.id}</p>
-          </div>
-        </div>
-      </td>
-
-      <td className="px-5 py-4 text-sm text-text">{review.product}</td>
-
-      <td className="px-5 py-4">
-        <RatingStars rating={review.rating} />
-      </td>
-
-      <td className="max-w-[320px] px-5 py-4">
-        <p className="truncate text-sm font-medium text-text">{review.title}</p>
-
-        <p className="mt-1 truncate text-xs text-text-secondary">
-          {review.comment}
-        </p>
-      </td>
-
-      <td className="px-5 py-4">
-        <ReviewStatus status={review.status} />
-      </td>
-
-      <td className="px-5 py-4 text-sm text-text-secondary">{review.date}</td>
-
-      <td className="px-5 py-4 text-right">
-        <button
-          type="button"
-          onClick={() => onView(review)}
-          aria-label={`View ${review.id}`}
-          className="
-            inline-flex
-            h-9
-            w-9
-            items-center
-            justify-center
-            rounded-lg
-            text-text-secondary
-            transition
-            hover:bg-surface-container
-            hover:text-primary
-          "
-        >
-          <Eye size={17} />
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-/* =========================================================
-   MOBILE CARD
-========================================================= */
-
-function ReviewCard({ review, onView }) {
-  return (
-    <article className="rounded-2xl border border-outline-variant bg-surface p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <Avatar name={review.customer} />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-text">
-                {review.customer}
-              </p>
-
-              <p className="mt-1 text-xs text-text-secondary">{review.id}</p>
-            </div>
-
-            <ReviewStatus status={review.status} />
-          </div>
-
-          <p className="mt-3 text-xs font-medium text-text">{review.product}</p>
-
-          <div className="mt-2">
-            <RatingStars rating={review.rating} />
-          </div>
-
-          <h3 className="mt-3 text-sm font-semibold text-text">
-            {review.title}
-          </h3>
-
-          <p className="mt-1 text-xs leading-5 text-text-secondary">
-            {review.comment}
-          </p>
-
-          <p className="mt-3 text-[11px] text-text-secondary">{review.date}</p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => onView(review)}
-        className="
-          mt-4
-          flex
-          h-10
-          w-full
-          items-center
-          justify-center
-          gap-2
-          rounded-xl
-          border
-          border-outline-variant
-          text-xs
-          font-semibold
-          text-text
-          transition
-          hover:bg-surface-container
-          hover:text-primary
-        "
-      >
-        <Eye size={15} />
-        View Review
-      </button>
-    </article>
-  );
-}
-
-/* =========================================================
-   RATING
-========================================================= */
-
-function RatingStars({ rating }) {
-  return (
-    <div
-      className="flex items-center gap-0.5"
-      aria-label={`${rating} out of 5 stars`}
-    >
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          size={14}
-          fill={star <= rating ? "currentColor" : "none"}
-          className={
-            star <= rating ? "text-orange-500" : "text-outline-variant"
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
-/* =========================================================
-   STATUS
-========================================================= */
 
 function ReviewStatus({ status }) {
-  if (status === "Published") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success">
-        <CheckCircle2 size={12} />
-        Published
-      </span>
-    );
-  }
-
-  if (status === "Rejected") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2.5 py-1.5 text-[10px] font-semibold text-error">
-        <XCircle size={12} />
-        Rejected
-      </span>
-    );
-  }
+  const labels = {
+    pending: "Awaiting moderation",
+    approved: "Published",
+    rejected: "Rejected",
+    removed: "Removed",
+  };
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1.5 text-[10px] font-semibold text-warning">
-      <MessageSquare size={12} />
-      Pending
+    <span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-medium capitalize text-text-secondary">
+      {labels[status] || status}
     </span>
   );
 }
 
-/* =========================================================
-   AVATAR
-========================================================= */
-
-function Avatar({ name }) {
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function ReviewActions({ review, disabled, onModerate }) {
+  const canPublish = Boolean(review.verifiedPurchase && review.order);
 
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container text-xs font-semibold text-primary">
-      {initials}
-    </div>
-  );
-}
-
-/* =========================================================
-   EMPTY
-========================================================= */
-
-function EmptyReviews() {
-  return (
-    <div className="flex flex-col items-center justify-center py-10 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container">
-        <Star size={21} className="text-text-secondary" />
-      </div>
-
-      <h2 className="mt-3 text-sm font-semibold text-text">No reviews found</h2>
-
-      <p className="mt-1 max-w-xs text-xs leading-5 text-text-secondary">
-        Try changing your search, rating, or status filter.
-      </p>
+    <div className="flex flex-wrap gap-2 lg:justify-end">
+      {canPublish && review.status !== "approved" && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onModerate(review._id, "approved")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-success/10 px-3 text-xs font-semibold text-success disabled:opacity-50"
+        >
+          <Check size={14} /> Approve
+        </button>
+      )}
+      {review.status !== "rejected" && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onModerate(review._id, "rejected")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-warning/10 px-3 text-xs font-semibold text-warning disabled:opacity-50"
+        >
+          <X size={14} /> Reject
+        </button>
+      )}
+      {review.status !== "removed" && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onModerate(review._id, "removed")}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/10 px-3 text-xs font-semibold text-error disabled:opacity-50"
+        >
+          <Trash2 size={14} /> Remove
+        </button>
+      )}
+      {review.status === "removed" && canPublish && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onModerate(review._id, "pending")}
+          className="h-9 rounded-lg border border-outline-variant px-3 text-xs font-semibold text-text disabled:opacity-50"
+        >
+          Restore to pending
+        </button>
+      )}
     </div>
   );
 }

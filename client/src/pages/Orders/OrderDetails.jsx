@@ -7,11 +7,16 @@ import {
   MapPin,
   Package,
   RotateCcw,
+  Star,
   Truck,
   XCircle,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getOrderById, requestReturn } from "../../services/orderService";
+import {
+  getMyOrderReviews,
+  submitReview,
+} from "../../services/reviewService";
 
 function OrderDetails() {
   const navigate = useNavigate();
@@ -26,6 +31,9 @@ function OrderDetails() {
   const [returnSubmitting, setReturnSubmitting] = useState(false);
   const [returnError, setReturnError] = useState("");
   const [returnMessage, setReturnMessage] = useState("");
+  const [orderReviews, setOrderReviews] = useState([]);
+  const [reviewLoadError, setReviewLoadError] = useState("");
+  const [reviewStatusLoading, setReviewStatusLoading] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -40,6 +48,22 @@ function OrderDetails() {
         if (!isMounted) return;
 
         setOrder(response?.order || null);
+        setOrderReviews([]);
+        setReviewLoadError("");
+        setReviewStatusLoading(true);
+        try {
+          const reviewResponse = await getMyOrderReviews(orderId);
+          if (isMounted) setOrderReviews(reviewResponse.reviews || []);
+        } catch (reviewError) {
+          if (!isMounted) return;
+          console.error("Order review status fetch error:", reviewError);
+          setReviewLoadError(
+            reviewError?.response?.data?.message ||
+              "Unable to load your review status.",
+          );
+        } finally {
+          if (isMounted) setReviewStatusLoading(false);
+        }
       } catch (err) {
         if (!isMounted) return;
 
@@ -216,6 +240,10 @@ function OrderDetails() {
     order?.orderStatus === "Delivered" &&
     order?.returnStatus === "Not Requested" &&
     Boolean(order?.returnEligibleUntil);
+
+  const handleReviewSubmitted = (review) => {
+    setOrderReviews((current) => [...current, review]);
+  };
 
   const canRequestRefund =
     order?.paymentMethod === "ONLINE" &&
@@ -449,6 +477,10 @@ function OrderDetails() {
             {order.items?.map((item, index) => {
               const product = item.product;
               const image = getProductImage(product);
+              const productId = product?._id || item.product;
+              const existingReview = orderReviews.find(
+                (review) => String(review.product) === String(productId),
+              );
 
               return (
                 <div
@@ -516,6 +548,25 @@ function OrderDetails() {
                       </p>
                     </div>
                   </div>
+
+                  {order.orderStatus === "Delivered" &&
+                    productId &&
+                    (reviewLoadError ? (
+                      <p role="alert" className="mt-4 text-sm text-error">
+                        {reviewLoadError}
+                      </p>
+                    ) : reviewStatusLoading ? (
+                      <p className="mt-4 text-sm text-text-secondary">
+                        Loading review status...
+                      </p>
+                    ) : (
+                      <OrderItemReview
+                        orderId={order._id}
+                        productId={productId}
+                        existingReview={existingReview}
+                        onSubmitted={handleReviewSubmitted}
+                      />
+                    ))}
                 </div>
               );
             })}
@@ -738,6 +789,119 @@ function OrderDetails() {
         </section>
       </div>
     </main>
+  );
+}
+
+function OrderItemReview({
+  orderId,
+  productId,
+  existingReview,
+  onSubmitted,
+}) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const response = await submitReview({
+        orderId,
+        productId,
+        rating,
+        comment: comment.trim(),
+      });
+      onSubmitted(response.review);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message ||
+          "Unable to submit your review. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (existingReview) {
+    const statusText = {
+      pending: "Your review is awaiting admin approval.",
+      approved: "Your review is published.",
+      rejected: "Your review was not approved.",
+      removed: "Your review was removed by an administrator.",
+    }[existingReview.status] || "Your review has been submitted.";
+
+    return (
+      <div className="mt-4 rounded-xl bg-surface-container p-4">
+        <p className="text-sm font-semibold text-text">
+          Review submitted · {existingReview.rating}/5
+        </p>
+        <p className="mt-1 text-xs text-text-secondary">{statusText}</p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mt-4 grid gap-3 rounded-xl bg-surface-container p-4"
+    >
+      <div>
+        <p className="text-sm font-semibold text-text">Rate this product</p>
+        <div className="mt-2 flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setRating(value)}
+              aria-label={`${value} star${value === 1 ? "" : "s"}`}
+              aria-pressed={rating === value}
+              className="rounded p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <Star
+                size={20}
+                className={
+                  value <= rating
+                    ? "fill-amber-400 text-amber-400"
+                    : "text-outline-variant"
+                }
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="grid gap-1 text-sm font-medium text-text">
+        Your review
+        <textarea
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          required
+          minLength={5}
+          maxLength={1000}
+          rows={3}
+          placeholder="Share your experience (5-1000 characters)"
+          className="rounded-lg border border-outline-variant bg-surface px-3 py-2 text-sm font-normal"
+        />
+      </label>
+      {error && (
+        <p role="alert" className="text-sm text-error">
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={submitting || comment.trim().length < 5}
+        className="h-10 justify-self-start rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {submitting ? "Submitting..." : "Submit review"}
+      </button>
+      <p className="text-xs text-text-secondary">
+        One review per delivered order and product. Reviews appear after admin approval.
+      </p>
+    </form>
   );
 }
 

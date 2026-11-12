@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import ProductGallery from "../../components/product/ProductGallery";
 import ProductInfo from "../../components/product/ProductInfo";
 import ProductActions from "../../components/product/ProductActions";
+import ProductReviews from "../../components/product/ProductReviews";
 
 import { getProductById } from "../../services/productService";
 
@@ -19,6 +20,12 @@ function ProductDetails() {
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState("");
+
+  const [reviewSummary, setReviewSummary] = useState(null);
+
+  const handleReviewSummary = useCallback((summary) => {
+    setReviewSummary(summary);
+  }, []);
 
   /* =====================================================
      FETCH REAL PRODUCT
@@ -156,9 +163,11 @@ function ProductDetails() {
 
     categoryLabel: categoryLabel || "",
 
-    rating: Number(product.rating || 0),
+    rating: Number(
+      reviewSummary?.averageRating ?? product.rating ?? 0,
+    ),
 
-    reviewCount: Number(product.reviewCount || 0),
+    reviewCount: Number(reviewSummary?.count ?? product.reviewCount ?? 0),
 
     soldCount: Number(product.soldCount || 0),
 
@@ -252,6 +261,11 @@ function ProductDetails() {
             </div>
           </div>
         </section>
+
+        <ProductReviews
+          productId={productId}
+          onSummary={handleReviewSummary}
+        />
       </div>
     </main>
   );

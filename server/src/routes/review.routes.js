@@ -1,42 +1,41 @@
 import express from "express";
-
 import {
   addReview,
+  getAdminReviews,
+  getMyOrderReviews,
   getProductReviews,
-  updateReview,
-  deleteReview,
+  updateReviewStatus,
 } from "../controllers/review.controller.js";
-
-import { protectedRoute } from "../middleware/customerAuth.middleware.js";
-
+import {
+  protectedRoute as customerProtectedRoute,
+} from "../middleware/customerAuth.middleware.js";
+import {
+  protectedRoute as adminProtectedRoute,
+  authorize as adminAuthorize,
+} from "../middleware/adminAuth.middleware.js";
 import validate from "../middleware/validate.middleware.js";
-
 import {
   addReviewSchema,
-  updateReviewSchema,
+  reviewStatusSchema,
 } from "../validations/review.validation.js";
 
 const router = express.Router();
 
-// Add Review
-
-router.post("/", protectedRoute, validate(addReviewSchema), addReview);
-
-// Get Product Reviews
-
-router.get("/:productId", getProductReviews);
-
-// Update Review
-
-router.put(
-  "/:reviewId",
-  protectedRoute,
-  validate(updateReviewSchema),
-  updateReview,
+router.get(
+  "/admin",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  getAdminReviews,
 );
-
-// Delete Review
-
-router.delete("/:reviewId", protectedRoute, deleteReview);
+router.patch(
+  "/admin/:reviewId/status",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  validate(reviewStatusSchema),
+  updateReviewStatus,
+);
+router.get("/mine/order/:orderId", customerProtectedRoute, getMyOrderReviews);
+router.post("/", customerProtectedRoute, validate(addReviewSchema), addReview);
+router.get("/:productId", getProductReviews);
 
 export default router;

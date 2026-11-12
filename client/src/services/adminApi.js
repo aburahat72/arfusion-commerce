@@ -116,6 +116,14 @@ export const updateAdminOrderStatus = (orderId, orderStatus) => {
   });
 };
 
+export const getAdminReviews = (params = {}) => {
+  return adminApi.get("/reviews/admin", { params });
+};
+
+export const updateAdminReviewStatus = (reviewId, status) => {
+  return adminApi.patch(`/reviews/admin/${reviewId}/status`, { status });
+};
+
 // =====================================================
 // RETURNS
 // =====================================================
