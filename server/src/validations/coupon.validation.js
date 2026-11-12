@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-// Create Coupon
-export const createCouponSchema = z.object({
+const couponFields = {
   code: z
     .string()
     .trim()
@@ -9,17 +8,15 @@ export const createCouponSchema = z.object({
     .max(20, "Coupon code cannot exceed 20 characters")
     .transform((value) => value.toUpperCase()),
 
+  description: z.string().trim().max(200).optional(),
+
   discountType: z.enum(["PERCENTAGE", "FIXED"], {
     errorMap: () => ({
       message: "Discount type must be PERCENTAGE or FIXED",
     }),
   }),
 
-  discountValue: z
-    .number({
-      required_error: "Discount value is required",
-    })
-    .positive("Discount value must be greater than 0"),
+  discountValue: z.number().positive("Discount value must be greater than 0"),
 
   minimumOrderAmount: z
     .number()
@@ -40,7 +37,41 @@ export const createCouponSchema = z.object({
   expiresAt: z.string().datetime("Invalid expiry date"),
 
   isActive: z.boolean().optional(),
+
+  isPublic: z.boolean().optional(),
+
+  assignedCustomers: z.array(z.string().min(1)).optional(),
+};
+
+// Create Coupon
+export const createCouponSchema = z.object(couponFields).superRefine((data, ctx) => {
+  if (data.discountType === "PERCENTAGE" && data.discountValue > 100) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["discountValue"],
+      message: "Percentage discount cannot exceed 100%",
+    });
+  }
+  if (data.isPublic === false && !data.assignedCustomers?.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["assignedCustomers"],
+      message: "Assign at least one customer to a private coupon",
+    });
+  }
 });
 
 // Update Coupon
-export const updateCouponSchema = createCouponSchema.partial();
+export const updateCouponSchema = z.object(couponFields).partial().superRefine((data, ctx) => {
+  if (
+    data.discountType === "PERCENTAGE" &&
+    data.discountValue !== undefined &&
+    data.discountValue > 100
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["discountValue"],
+      message: "Percentage discount cannot exceed 100%",
+    });
+  }
+});

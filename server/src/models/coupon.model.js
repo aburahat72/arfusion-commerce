@@ -10,6 +10,25 @@ const couponSchema = new mongoose.Schema(
       trim: true,
     },
 
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      default: "",
+    },
+
+    isPublic: {
+      type: Boolean,
+      default: true,
+    },
+
+    assignedCustomers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
     discountType: {
       type: String,
       enum: ["PERCENTAGE", "FIXED"],
@@ -25,21 +44,25 @@ const couponSchema = new mongoose.Schema(
     minimumOrderAmount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     maximumDiscount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     usageLimit: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     usedCount: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     expiresAt: {

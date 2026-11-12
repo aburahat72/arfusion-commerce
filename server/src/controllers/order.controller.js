@@ -8,6 +8,11 @@ import {
   CheckoutInputError,
   normalizeCheckoutItems,
 } from "../utils/checkoutItems.js";
+import {
+  calculateCouponPricing,
+  CouponEligibilityError,
+  redeemCoupon,
+} from "../utils/couponPricing.js";
 import { emitToAdmins, emitToCustomer } from "../realtime/socket.server.js";
 
 import {
@@ -34,7 +39,7 @@ export const placeOrder = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const { items, shippingAddress, paymentMethod } = req.body;
+    const { items, shippingAddress, paymentMethod, couponCode } = req.body;
 
     // -------------------------------------------------
     // VALIDATE ORDER ITEMS
@@ -176,9 +181,12 @@ export const placeOrder = async (req, res) => {
     // CALCULATE TOTAL PRICE
     // -------------------------------------------------
 
-    const totalPrice = orderItems.reduce((total, item) => {
-      return total + item.price * item.quantity;
-    }, 0);
+    const pricing = await calculateCouponPricing(
+      orderItems,
+      userId,
+      couponCode,
+      { session },
+    );
 
     // -------------------------------------------------
     // CREATE ORDER
@@ -191,7 +199,19 @@ export const placeOrder = async (req, res) => {
 
           items: orderItems,
 
-          totalPrice,
+          totalPrice: pricing.totalPrice,
+
+          subtotal: pricing.subtotal,
+
+          shippingAmount: pricing.shipping,
+
+          discount: pricing.discount,
+
+          couponDiscount: pricing.couponDiscount,
+
+          coupon: pricing.couponId,
+
+          couponCode: pricing.couponCode,
 
           shippingAddress: shippingAddress.trim(),
 
@@ -284,6 +304,8 @@ export const placeOrder = async (req, res) => {
       });
     }
 
+    await redeemCoupon(pricing, userId, session);
+
     // -------------------------------------------------
     // CREATE INVENTORY LOGS
     // -------------------------------------------------
@@ -356,6 +378,12 @@ export const placeOrder = async (req, res) => {
     }
 
     if (error instanceof CheckoutInputError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
+    if (error instanceof CouponEligibilityError || error.statusCode === 409) {
       return res.status(error.statusCode).json({
         success: false,
         message: error.message,

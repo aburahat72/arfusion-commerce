@@ -1,14 +1,115 @@
 import mongoose from "mongoose";
 import Coupon from "../models/coupon.model.js";
+import Product from "../models/product.model.js";
+import PaymentIntent from "../models/paymentIntent.model.js";
+import User from "../models/user.model.js";
+import {
+  CheckoutInputError,
+  normalizeCheckoutItems,
+} from "../utils/checkoutItems.js";
+import {
+  calculateCouponPricing,
+  CouponEligibilityError,
+} from "../utils/couponPricing.js";
 
-// createCoupon
-// Create Coupon
+const validateAssignedCustomers = async (customerIds = []) => {
+  const uniqueIds = [...new Set(customerIds.map(String))];
+  if (uniqueIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+    return false;
+  }
+  if (uniqueIds.length === 0) return true;
+
+  const customers = await User.find({
+    _id: { $in: uniqueIds },
+    role: "customer",
+  }).select("_id");
+
+  return customers.length === uniqueIds.length;
+};
+
+const getCheckoutLines = async (items) => {
+  const normalizedItems = normalizeCheckoutItems(items);
+  const lines = [];
+
+  for (const item of normalizedItems) {
+    const product = await Product.findById(item.productId).select(
+      "price isActive",
+    );
+    if (!product || !product.isActive) {
+      throw new CheckoutInputError("A selected product is no longer available.");
+    }
+
+    lines.push({
+      product: product._id,
+      quantity: item.quantity,
+      price: Number(product.price),
+    });
+  }
+
+  return lines;
+};
+
+const handleCouponError = (res, error, operation) => {
+  console.error(`${operation} Error:`, error);
+
+  if (
+    error instanceof CheckoutInputError ||
+    error instanceof CouponEligibilityError
+  ) {
+    return res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+  if (error.code === 11000) {
+    return res.status(409).json({
+      success: false,
+      message: "Coupon code already exists.",
+    });
+  }
+  if (error.name === "ValidationError" || error.name === "CastError") {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
+};
+
 export const createCoupon = async (req, res) => {
   try {
-    // Logic started
-    // Get request data
     const {
       code,
+      description,
+      discountType,
+      discountValue,
+      minimumOrderAmount = 0,
+      maximumDiscount = 0,
+      usageLimit = 0,
+      expiresAt,
+      isActive = true,
+      isPublic = true,
+      assignedCustomers = [],
+    } = req.body;
+
+    if (
+      !isPublic &&
+      (!assignedCustomers.length ||
+        !(await validateAssignedCustomers(assignedCustomers)))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Assign at least one valid customer to a private coupon.",
+      });
+    }
+
+    const coupon = await Coupon.create({
+      code,
+      description,
       discountType,
       discountValue,
       minimumOrderAmount,
@@ -16,93 +117,39 @@ export const createCoupon = async (req, res) => {
       usageLimit,
       expiresAt,
       isActive,
-    } = req.body;
-
-    // Check whether coupon already exists
-    const existingCoupon = await Coupon.findOne({
-      code: code.toUpperCase(),
+      isPublic,
+      assignedCustomers: isPublic ? [] : assignedCustomers,
     });
 
-    if (existingCoupon) {
-      return res.status(400).json({
-        success: false,
-        message: "Coupon code already exists",
-      });
-    }
-
-    // Create coupon
-    const coupon = await Coupon.create({
-      code: code.toUpperCase(),
-      discountType,
-      discountValue,
-      minimumOrderAmount: minimumOrderAmount || 0,
-      maximumDiscount: maximumDiscount || 0,
-      usageLimit: usageLimit || 0,
-      usedCount: 0,
-      expiresAt,
-      isActive: isActive ?? true,
-    });
-
-    // Return created coupon
     return res.status(201).json({
       success: true,
       message: "Coupon created successfully",
       coupon,
     });
   } catch (error) {
-    console.error("Create Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Create Coupon");
   }
 };
 
-// getCoupons
-// Get All Coupons
 export const getCoupons = async (req, res) => {
   try {
-    // Logic started
-    // Get all coupons
-    const coupons = await Coupon.find().sort({
-      createdAt: -1,
-    });
+    const coupons = await Coupon.find()
+      .populate("assignedCustomers", "fullName email")
+      .sort({ createdAt: -1 });
 
-    // Check whether coupons exist
-    if (coupons.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: "No coupons found",
-        coupons: [],
-      });
-    }
-
-    // Return coupons
     return res.status(200).json({
       success: true,
       count: coupons.length,
       coupons,
     });
   } catch (error) {
-    console.error("Get Coupons Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Get Coupons");
   }
 };
 
-// getCoupon
-// Get Single Coupon
 export const getCoupon = async (req, res) => {
   try {
-    // Logic started
-    // Get coupon ID from URL
     const { couponId } = req.params;
-
-    // Check whether coupon ID is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(couponId)) {
       return res.status(400).json({
         success: false,
@@ -110,10 +157,10 @@ export const getCoupon = async (req, res) => {
       });
     }
 
-    // Find coupon
-    const coupon = await Coupon.findById(couponId);
-
-    // Check whether coupon exists
+    const coupon = await Coupon.findById(couponId).populate(
+      "assignedCustomers",
+      "fullName email",
+    );
     if (!coupon) {
       return res.status(404).json({
         success: false,
@@ -121,32 +168,33 @@ export const getCoupon = async (req, res) => {
       });
     }
 
-    // Return coupon
-    return res.status(200).json({
-      success: true,
-      coupon,
-    });
+    return res.status(200).json({ success: true, coupon });
   } catch (error) {
-    console.error("Get Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Get Coupon");
   }
 };
 
-// updateCoupon
-// Update Coupon
 export const updateCoupon = async (req, res) => {
   try {
-    // Logic started
-    // Get coupon ID from URL
     const { couponId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(couponId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid coupon ID",
+      });
+    }
 
-    // Get request data
+    const coupon = await Coupon.findById(couponId);
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: "Coupon not found",
+      });
+    }
+
     const {
       code,
+      description,
       discountType,
       discountValue,
       minimumOrderAmount,
@@ -154,83 +202,61 @@ export const updateCoupon = async (req, res) => {
       usageLimit,
       expiresAt,
       isActive,
+      isPublic,
+      assignedCustomers,
     } = req.body;
 
-    // Check whether coupon ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(couponId)) {
+    const nextIsPublic = isPublic ?? coupon.isPublic;
+    const nextAssignedCustomers =
+      assignedCustomers ?? coupon.assignedCustomers.map(String);
+    if (
+      !nextIsPublic &&
+      (!nextAssignedCustomers.length ||
+        !(await validateAssignedCustomers(nextAssignedCustomers)))
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid coupon ID",
+        message: "Assign at least one valid customer to a private coupon.",
       });
     }
-
-    // Find coupon
-    const coupon = await Coupon.findById(couponId);
-
-    // Check whether coupon exists
-    if (!coupon) {
-      return res.status(404).json({
+    if (
+      (discountType ?? coupon.discountType) === "PERCENTAGE" &&
+      (discountValue ?? coupon.discountValue) > 100
+    ) {
+      return res.status(400).json({
         success: false,
-        message: "Coupon not found",
+        message: "Percentage discount cannot exceed 100%.",
       });
     }
 
-    // Check whether another coupon already uses this code
-    if (code && code.toUpperCase() !== coupon.code) {
-      const existingCoupon = await Coupon.findOne({
-        code: code.toUpperCase(),
-      });
-
-      if (existingCoupon) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon code already exists",
-        });
-      }
-
-      coupon.code = code.toUpperCase();
+    if (code !== undefined) coupon.code = code;
+    if (description !== undefined) coupon.description = description;
+    if (discountType !== undefined) coupon.discountType = discountType;
+    if (discountValue !== undefined) coupon.discountValue = discountValue;
+    if (minimumOrderAmount !== undefined) {
+      coupon.minimumOrderAmount = minimumOrderAmount;
     }
+    if (maximumDiscount !== undefined) coupon.maximumDiscount = maximumDiscount;
+    if (usageLimit !== undefined) coupon.usageLimit = usageLimit;
+    if (expiresAt !== undefined) coupon.expiresAt = expiresAt;
+    if (isActive !== undefined) coupon.isActive = isActive;
+    coupon.isPublic = nextIsPublic;
+    coupon.assignedCustomers = nextIsPublic ? [] : nextAssignedCustomers;
 
-    // Update coupon fields
-    coupon.discountType = discountType ?? coupon.discountType;
-    coupon.discountValue = discountValue ?? coupon.discountValue;
-    coupon.minimumOrderAmount = minimumOrderAmount ?? coupon.minimumOrderAmount;
-    coupon.maximumDiscount = maximumDiscount ?? coupon.maximumDiscount;
-    coupon.usageLimit = usageLimit ?? coupon.usageLimit;
-    coupon.expiresAt = expiresAt ?? coupon.expiresAt;
-
-    if (isActive !== undefined) {
-      coupon.isActive = isActive;
-    }
-
-    // Save updated coupon
     await coupon.save();
-
-    // Return updated coupon
     return res.status(200).json({
       success: true,
       message: "Coupon updated successfully",
       coupon,
     });
   } catch (error) {
-    console.error("Update Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Update Coupon");
   }
 };
 
-// deleteCoupon
-// Delete Coupon
 export const deleteCoupon = async (req, res) => {
   try {
-    // Logic started
-    // Get coupon ID from URL
     const { couponId } = req.params;
-
-    // Check whether coupon ID is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(couponId)) {
       return res.status(400).json({
         success: false,
@@ -238,10 +264,18 @@ export const deleteCoupon = async (req, res) => {
       });
     }
 
-    // Find coupon
-    const coupon = await Coupon.findById(couponId);
+    const pendingPayment = await PaymentIntent.exists({
+      coupon: couponId,
+      status: "Created",
+    });
+    if (pendingPayment) {
+      return res.status(409).json({
+        success: false,
+        message: "This coupon is attached to a pending payment and cannot be deleted yet.",
+      });
+    }
 
-    // Check whether coupon exists
+    const coupon = await Coupon.findByIdAndDelete(couponId);
     if (!coupon) {
       return res.status(404).json({
         success: false,
@@ -249,120 +283,39 @@ export const deleteCoupon = async (req, res) => {
       });
     }
 
-    // Delete coupon
-    await coupon.deleteOne();
-
-    // Return success response
     return res.status(200).json({
       success: true,
       message: "Coupon deleted successfully",
     });
   } catch (error) {
-    console.error("Delete Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Delete Coupon");
   }
 };
 
-// applyCoupon
-// Apply Coupon
-export const applyCoupon = async (req, res) => {
+export const getEligibleCoupons = async (req, res) => {
   try {
-    // Logic started
-    // Get request data
-    const { code, orderAmount } = req.body;
+    const lines = await getCheckoutLines(req.body.items);
+    const hasCouponCode = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "couponCode",
+    );
+    const pricing = await calculateCouponPricing(
+      lines,
+      req.user._id,
+      hasCouponCode ? req.body.couponCode : undefined,
+    );
 
-    // Find active coupon
-    const coupon = await Coupon.findOne({
-      code: code.toUpperCase(),
-      isActive: true,
-    });
-
-    // Check whether coupon exists
-    if (!coupon) {
-      return res.status(404).json({
-        success: false,
-        message: "Invalid coupon code",
-      });
-    }
-
-    // Check whether coupon has expired
-    if (new Date() > coupon.expiresAt) {
-      return res.status(400).json({
-        success: false,
-        message: "Coupon has expired",
-      });
-    }
-
-    // Check usage limit
-    if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) {
-      return res.status(400).json({
-        success: false,
-        message: "Coupon usage limit exceeded",
-      });
-    }
-
-    // Check minimum order amount
-    if (orderAmount < coupon.minimumOrderAmount) {
-      return res.status(400).json({
-        success: false,
-        message: `Minimum order amount is ₹${coupon.minimumOrderAmount}`,
-      });
-    }
-
-    // Calculate discount
-    let discount = 0;
-
-    if (coupon.discountType === "PERCENTAGE") {
-      discount = (orderAmount * coupon.discountValue) / 100;
-
-      if (coupon.maximumDiscount > 0 && discount > coupon.maximumDiscount) {
-        discount = coupon.maximumDiscount;
-      }
-    } else {
-      discount = coupon.discountValue;
-    }
-
-    // Calculate final amount
-    const finalAmount = Math.max(orderAmount - discount, 0);
-
-    // Return result
-    return res.status(200).json({
-      success: true,
-      message: "Coupon applied successfully",
-      coupon: coupon.code,
-      discount,
-      finalAmount,
-    });
+    return res.status(200).json({ success: true, pricing });
   } catch (error) {
-    console.error("Apply Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return handleCouponError(res, error, "Get Eligible Coupons");
   }
 };
 
-// removeCoupon
-// Remove Coupon
+export const applyCoupon = getEligibleCoupons;
+
 export const removeCoupon = async (req, res) => {
-  try {
-    // Logic started
-    // Return success response
-    return res.status(200).json({
-      success: true,
-      message: "Coupon removed successfully",
-    });
-  } catch (error) {
-    console.error("Remove Coupon Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    message: "Coupon removed successfully",
+  });
 };

@@ -8,6 +8,7 @@ import {
   deleteCoupon,
   applyCoupon,
   removeCoupon,
+  getEligibleCoupons,
 } from "../controllers/coupon.controller.js";
 
 import {
@@ -76,6 +77,12 @@ router.delete(
 );
 
 // Apply Coupon
+
+router.post(
+  "/eligible",
+  customerProtectedRoute,
+  getEligibleCoupons,
+);
 
 router.post(
   "/apply",

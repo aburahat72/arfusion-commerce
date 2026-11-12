@@ -130,6 +130,8 @@ function Payment() {
     shippingAddress = "",
     items = [],
     checkoutMode = "cart",
+    couponCode,
+    pricing: checkoutPricing,
   } = location.state || {};
 
   /*
@@ -143,6 +145,10 @@ function Payment() {
   const [loading, setLoading] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [paymentSummary, setPaymentSummary] = useState(checkoutPricing || null);
+  const [selectedCouponCode, setSelectedCouponCode] = useState(
+    couponCode || null,
+  );
 
   /*
    * ===================================================
@@ -234,7 +240,7 @@ function Payment() {
    * ===================================================
    */
 
-  const summary = useMemo(() => {
+  const localSummary = useMemo(() => {
     try {
       return calculateOrderSummary(normalizedItems);
     } catch (error) {
@@ -254,6 +260,8 @@ function Payment() {
     }
   }, [normalizedItems]);
 
+  const summary = paymentSummary || localSummary;
+
   const subtotal =
     Number(summary?.subtotal) ||
     Number(summary?.subTotal) ||
@@ -270,11 +278,13 @@ function Payment() {
     Number(summary?.discountAmount) ||
     0;
 
-  const total =
-    Number(summary?.total) ||
-    Number(summary?.totalPrice) ||
-    Number(summary?.grandTotal) ||
-    subtotal + shipping - discount;
+  const couponDiscount = Number(summary?.couponDiscount) || 0;
+
+  const suppliedTotal =
+    summary?.total ?? summary?.totalPrice ?? summary?.grandTotal;
+  const total = Number.isFinite(Number(suppliedTotal))
+    ? Number(suppliedTotal)
+    : subtotal + shipping - discount - couponDiscount;
 
   /*
    * ===================================================
@@ -360,6 +370,7 @@ function Payment() {
         items: orderItems,
         shippingAddress,
         paymentMethod: "COD",
+        couponCode: selectedCouponCode,
       });
 
       if (!response?.success) {
@@ -496,6 +507,7 @@ function Payment() {
       const paymentResponse = await createPaymentOrder({
         shippingAddress,
         checkoutMode,
+        couponCode: selectedCouponCode,
 
         items: normalizedItems.map((item) => ({
           product: item.product,
@@ -525,6 +537,11 @@ function Payment() {
         throw new Error(
           "Razorpay order ID was not returned by the server.",
         );
+      }
+
+      if (paymentResponse.summary) {
+        setPaymentSummary(paymentResponse.summary);
+        setSelectedCouponCode(paymentResponse.summary.couponCode || null);
       }
 
       paymentIntentRef.current = paymentResponse.paymentIntentId;
@@ -1157,7 +1174,9 @@ function Payment() {
 
                       <p className="mt-1 text-sm font-medium text-gray-900">
                         {formatCurrency(
-                          item.price * item.quantity,
+                          (summary?.items?.find(
+                            (line) => line.productId === item.product,
+                          )?.price ?? item.price) * item.quantity,
                         )}
                       </p>
                     </div>
@@ -1198,6 +1217,17 @@ function Payment() {
 
                     <span className="font-medium text-gray-900">
                       -{formatCurrency(discount)}
+                    </span>
+                  </div>
+                )}
+
+                {couponDiscount > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">
+                      Coupon{selectedCouponCode ? ` (${selectedCouponCode})` : ""}
+                    </span>
+                    <span className="font-medium text-gray-900">
+                      -{formatCurrency(couponDiscount)}
                     </span>
                   </div>
                 )}

@@ -45,6 +45,8 @@ export const createOrderSchema = z.object({
       message: "Online payment orders must use the Razorpay verification flow",
     }),
   }),
+
+  couponCode: z.string().trim().max(20).nullable().optional(),
 });
 
 // =====================================================

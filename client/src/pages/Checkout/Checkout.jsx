@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock, ShoppingBag, Truck, Check } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 
 import Button from "../../components/ui/Button";
@@ -9,9 +9,12 @@ import { formatCurrency } from "../../utils/currency";
 import { calculateOrderSummary } from "../../utils/orderSummary";
 
 import { getAddresses, addAddress } from "../../services/addressService";
+import { getEligibleCoupons } from "../../services/couponService";
+import { fetchCart } from "../../store/slices/cartSlice";
 
 function Checkout() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   /*
    * =========================
@@ -21,6 +24,9 @@ function Checkout() {
 
   // Normal cart items
   const cartItems = useSelector((state) => state.cart.items);
+  const cartLoading = useSelector((state) => state.cart.loading);
+  const cartError = useSelector((state) => state.cart.error);
+  const cartFetchStarted = useRef(false);
 
   // Buy Now checkout state
   const checkoutMode = useSelector((state) => state.checkout.mode);
@@ -36,14 +42,116 @@ function Checkout() {
 
   const itemsToCheckout = isBuyNow ? checkoutItems : cartItems;
 
+  useEffect(() => {
+    if (isBuyNow || cartFetchStarted.current) return;
+    cartFetchStarted.current = true;
+    if (cartItems.length === 0) {
+      dispatch(fetchCart());
+    }
+  }, [cartItems.length, dispatch, isBuyNow]);
+
   /*
    * =========================
    * ORDER SUMMARY
    * =========================
    */
 
-  const { subtotal, shipping, discount, total } =
-    calculateOrderSummary(itemsToCheckout);
+  const [couponOptions, setCouponOptions] = useState([]);
+  const [selectedCouponCode, setSelectedCouponCode] = useState(undefined);
+  const [couponPricing, setCouponPricing] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(true);
+  const [couponError, setCouponError] = useState("");
+  const couponRequestId = useRef(0);
+
+  const summary =
+    couponPricing || calculateOrderSummary(itemsToCheckout);
+  const {
+    subtotal,
+    shipping,
+    discount,
+    couponDiscount = 0,
+  } = summary;
+  const total = summary.total ?? summary.totalPrice;
+
+  useEffect(() => {
+    let active = true;
+    const requestId = ++couponRequestId.current;
+
+    if (itemsToCheckout.length === 0) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const items = itemsToCheckout.map((item) => ({
+      productId: item.id || item._id || item.productId,
+      quantity: item.quantity,
+    }));
+
+    getEligibleCoupons(items)
+      .then((pricing) => {
+        if (!active || requestId !== couponRequestId.current) return;
+        setCouponPricing(pricing);
+        setCouponOptions(pricing.availableCoupons || []);
+        setSelectedCouponCode(pricing.couponCode || null);
+      })
+      .catch((error) => {
+        console.error("Unable to load checkout coupons:", error);
+        if (active && requestId === couponRequestId.current) {
+          setSelectedCouponCode(null);
+          setCouponError("Offers could not be loaded. You can continue checkout.");
+        }
+      })
+      .finally(() => {
+        if (active && requestId === couponRequestId.current) {
+          setCouponLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [itemsToCheckout]);
+
+  const handleCouponChange = async (event) => {
+    const code = event.target.value || null;
+    setSelectedCouponCode(code);
+    setCouponError("");
+    const requestId = ++couponRequestId.current;
+
+    try {
+      const pricing = await getEligibleCoupons(
+        itemsToCheckout.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+        })),
+        code,
+      );
+      if (requestId !== couponRequestId.current) return;
+      setCouponPricing(pricing);
+      setCouponOptions(pricing.availableCoupons || []);
+    } catch (error) {
+      console.error("Unable to update checkout coupon:", error);
+      if (requestId === couponRequestId.current) {
+        setSelectedCouponCode(null);
+        setCouponPricing((current) =>
+          current
+            ? {
+                ...current,
+                couponCode: "",
+                couponDiscount: 0,
+                totalPrice:
+                  current.subtotal + current.shipping - current.discount,
+              }
+            : current,
+        );
+        setCouponError(
+          error?.response?.data?.message ||
+            "Unable to apply this coupon. Checkout can continue without it.",
+        );
+      }
+    }
+  };
 
   /*
    * =========================
@@ -371,8 +479,11 @@ function Checkout() {
        * from the database.
        */
       const items = itemsToCheckout.map((item) => ({
-        productId: item.id,
+        productId: item.id || item._id || item.productId,
         quantity: item.quantity,
+        price: Number(item.price) || 0,
+        name: item.name || item.title || "Product",
+        image: item.image || item.images?.[0]?.url || item.images?.[0] || "",
       }));
 
       /*
@@ -383,6 +494,8 @@ function Checkout() {
           shippingAddress,
           items,
           checkoutMode: isBuyNow ? "buyNow" : "cart",
+          couponCode: selectedCouponCode,
+          pricing: couponPricing,
         },
       });
     } catch (error) {
@@ -417,20 +530,34 @@ function Checkout() {
             </div>
 
             <h1 className="mt-5 text-2xl font-semibold text-text">
-              Nothing to checkout
+              {cartLoading ? "Loading your cart" : "Nothing to checkout"}
             </h1>
 
             <p className="mt-2 text-sm text-text-secondary">
-              Add products before proceeding to checkout.
+              {cartLoading
+                ? "Getting your latest cart items."
+                : cartError
+                  ? cartError
+                  : "Add products before proceeding to checkout."}
             </p>
 
-            <Button
-              size="large"
-              className="mt-6"
-              onClick={() => navigate("/products")}
-            >
-              Continue Shopping
-            </Button>
+            {cartError && !cartLoading ? (
+              <Button
+                size="large"
+                className="mt-6"
+                onClick={() => dispatch(fetchCart())}
+              >
+                Retry Loading Cart
+              </Button>
+            ) : (
+              <Button
+                size="large"
+                className="mt-6"
+                onClick={() => navigate("/products")}
+              >
+                Continue Shopping
+              </Button>
+            )}
           </div>
         </div>
       </main>
@@ -844,11 +971,51 @@ function Checkout() {
 
                   {/* Item Total */}
                   <p className="text-sm font-semibold text-text">
-                    {formatCurrency(Number(item.price) * item.quantity)}
+                    {formatCurrency(
+                      (summary.items?.find(
+                        (line) => line.productId === item.id,
+                      )?.price ?? Number(item.price)) * item.quantity,
+                    )}
                   </p>
                 </div>
               ))}
             </div>
+
+            {couponLoading ? (
+              <p className="mt-5 text-xs text-text-secondary">
+                Checking available offers...
+              </p>
+            ) : couponOptions.length > 0 ? (
+              <div className="mt-5 border-t border-outline-variant pt-4">
+                <label
+                  htmlFor="checkout-coupon"
+                  className="text-sm font-medium text-text"
+                >
+                  Coupon
+                </label>
+                <select
+                  id="checkout-coupon"
+                  value={selectedCouponCode || ""}
+                  onChange={handleCouponChange}
+                  className="mt-2 h-11 w-full rounded-xl border border-outline-variant bg-surface px-3 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                >
+                  <option value="">No coupon</option>
+                  {couponOptions.map((coupon) => (
+                    <option key={coupon.id} value={coupon.code}>
+                      {coupon.code} - save {formatCurrency(coupon.discountAmount)}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-text-secondary">
+                  The best eligible offer is selected automatically.
+                </p>
+                {couponError && (
+                  <p className="mt-1 text-xs text-error">{couponError}</p>
+                )}
+              </div>
+            ) : couponError ? (
+              <p className="mt-5 text-xs text-text-secondary">{couponError}</p>
+            ) : null}
 
             {/* Totals */}
             <div className="mt-6 space-y-4 border-t border-outline-variant pt-5 text-sm">
@@ -877,6 +1044,17 @@ function Checkout() {
 
                   <span className="font-medium text-error">
                     -{formatCurrency(discount)}
+                  </span>
+                </div>
+              )}
+
+              {couponDiscount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">
+                    Coupon{selectedCouponCode ? ` (${selectedCouponCode})` : ""}
+                  </span>
+                  <span className="font-medium text-error">
+                    -{formatCurrency(couponDiscount)}
                   </span>
                 </div>
               )}

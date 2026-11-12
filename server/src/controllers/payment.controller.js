@@ -10,6 +10,11 @@ import {
   CheckoutInputError,
   normalizeCheckoutItems,
 } from "../utils/checkoutItems.js";
+import {
+  calculateCouponPricing,
+  CouponEligibilityError,
+  redeemCoupon,
+} from "../utils/couponPricing.js";
 import { emitToAdmins, emitToCustomer } from "../realtime/socket.server.js";
 
 import { sendPaymentSuccessEmail } from "../services/email.services.js";
@@ -41,7 +46,12 @@ export const createPaymentOrder = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const { shippingAddress, items = [], checkoutMode = "cart" } = req.body;
+    const {
+      shippingAddress,
+      items = [],
+      checkoutMode = "cart",
+      couponCode,
+    } = req.body;
 
     /*
      * =====================================================
@@ -128,8 +138,6 @@ export const createPaymentOrder = async (req, res) => {
      * Never trust frontend prices.
      */
 
-    let totalPrice = 0;
-
     const paymentItems = [];
 
     for (const item of normalizedItems) {
@@ -191,8 +199,6 @@ export const createPaymentOrder = async (req, res) => {
         });
       }
 
-      totalPrice += price * item.quantity;
-
       paymentItems.push({
         product: product._id,
         quantity: item.quantity,
@@ -206,7 +212,12 @@ export const createPaymentOrder = async (req, res) => {
      * =====================================================
      */
 
-    totalPrice = Number(totalPrice.toFixed(2));
+    const pricing = await calculateCouponPricing(
+      paymentItems,
+      userId,
+      couponCode,
+    );
+    const totalPrice = pricing.totalPrice;
 
     if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
       return res.status(400).json({
@@ -229,6 +240,18 @@ export const createPaymentOrder = async (req, res) => {
       items: paymentItems,
 
       totalPrice,
+
+      subtotal: pricing.subtotal,
+
+      shippingAmount: pricing.shipping,
+
+      discount: pricing.discount,
+
+      couponDiscount: pricing.couponDiscount,
+
+      coupon: pricing.couponId,
+
+      couponCode: pricing.couponCode,
 
       shippingAddress: shippingAddress.trim(),
 
@@ -322,11 +345,27 @@ export const createPaymentOrder = async (req, res) => {
       amount: razorpayOrder.amount,
 
       currency: razorpayOrder.currency,
+
+      summary: {
+        items: pricing.items,
+        subtotal: pricing.subtotal,
+        shipping: pricing.shipping,
+        discount: pricing.discount,
+        couponDiscount: pricing.couponDiscount,
+        couponCode: pricing.couponCode,
+        total: pricing.totalPrice,
+      },
     });
   } catch (error) {
     console.error("Create Payment Error:", error);
 
     if (error instanceof CheckoutInputError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
+    if (error instanceof CouponEligibilityError) {
       return res.status(error.statusCode).json({
         success: false,
         message: error.message,
@@ -722,6 +761,18 @@ export const verifyPayment = async (req, res) => {
 
           totalPrice: paymentIntent.totalPrice,
 
+          subtotal: paymentIntent.subtotal,
+
+          shippingAmount: paymentIntent.shippingAmount,
+
+          discount: paymentIntent.discount,
+
+          couponDiscount: paymentIntent.couponDiscount,
+
+          coupon: paymentIntent.coupon,
+
+          couponCode: paymentIntent.couponCode,
+
           shippingAddress: paymentIntent.shippingAddress,
 
           paymentMethod: "ONLINE",
@@ -736,6 +787,16 @@ export const verifyPayment = async (req, res) => {
       {
         session,
       },
+    );
+
+    await redeemCoupon(
+      {
+        couponId: paymentIntent.coupon,
+        subtotal: paymentIntent.subtotal,
+      },
+      userId,
+      session,
+      { paymentSnapshot: true },
     );
 
     /*
