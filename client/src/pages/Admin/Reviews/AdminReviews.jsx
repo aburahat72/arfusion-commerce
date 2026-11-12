@@ -5,11 +5,13 @@ import {
   ChevronRight,
   Search,
   Star,
+  Trash,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  deleteAdminReview,
   getAdminReviews,
   updateAdminReviewStatus,
 } from "../../../services/adminApi";
@@ -96,6 +98,30 @@ function AdminReviews() {
       setError(
         requestError?.response?.data?.message ||
           "Unable to update this review.",
+      );
+    } finally {
+      setUpdatingId("");
+    }
+  };
+
+  const permanentlyDeleteReview = async (review) => {
+    const confirmed = window.confirm(
+      "Permanently delete this review? Its rating and comment will be erased and cannot be recovered. The customer will not be able to submit another review for this order item.",
+    );
+    if (!confirmed) return;
+
+    setUpdatingId(review._id);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await deleteAdminReview(review._id);
+      setNotice(response.data.message || "Review permanently deleted.");
+      setRefresh((current) => current + 1);
+    } catch (requestError) {
+      setError(
+        requestError?.response?.data?.message ||
+          "Unable to permanently delete this review.",
       );
     } finally {
       setUpdatingId("");
@@ -290,6 +316,7 @@ function AdminReviews() {
                     review={review}
                     disabled={updatingId === review._id}
                     onModerate={moderateReview}
+                    onDelete={permanentlyDeleteReview}
                   />
                 </article>
               ))}
@@ -325,7 +352,7 @@ function ReviewStatus({ status }) {
   );
 }
 
-function ReviewActions({ review, disabled, onModerate }) {
+function ReviewActions({ review, disabled, onModerate, onDelete }) {
   const canPublish = Boolean(review.verifiedPurchase && review.order);
 
   return (
@@ -360,6 +387,14 @@ function ReviewActions({ review, disabled, onModerate }) {
           <Trash2 size={14} /> Remove
         </button>
       )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onDelete(review)}
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-error/30 px-3 text-xs font-semibold text-error disabled:opacity-50"
+      >
+        <Trash size={14} /> Delete permanently
+      </button>
       {review.status === "removed" && canPublish && (
         <button
           type="button"

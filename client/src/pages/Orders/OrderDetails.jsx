@@ -826,6 +826,20 @@ function OrderItemReview({
     }
   };
 
+  if (existingReview?.status === "deleted") {
+    return (
+      <div className="mt-4 rounded-xl bg-surface-container p-4">
+        <p className="text-sm font-semibold text-text">
+          This order item has already used its review.
+        </p>
+        <p className="mt-1 text-xs text-text-secondary">
+          An administrator permanently deleted the review content. A new review
+          cannot be submitted for this order item.
+        </p>
+      </div>
+    );
+  }
+
   if (existingReview) {
     const statusText = {
       pending: "Your review is awaiting admin approval.",

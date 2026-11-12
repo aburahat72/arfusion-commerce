@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import Review from "../models/review.model.js";
+import ReviewClaim from "../models/reviewClaim.model.js";
 import User from "../models/user.model.js";
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -51,26 +52,45 @@ export const addReview = async (req, res) => {
       });
     }
 
-    const existingReview = await Review.findOne({
+    const existingClaim = await ReviewClaim.findOne({
       user: req.user._id,
       order: orderId,
       product: productId,
     }).select("_id");
 
-    if (existingReview) {
+    if (existingClaim) {
       return res.status(409).json({
         success: false,
         message: "You have already reviewed this product in this order",
       });
     }
 
-    const review = await Review.create({
-      user: req.user._id,
-      order: orderId,
-      product: productId,
-      rating,
-      comment,
-    });
+    const session = await mongoose.startSession();
+    let review;
+    try {
+      await session.withTransaction(async () => {
+        await ReviewClaim.create(
+          [{
+            user: req.user._id,
+            order: orderId,
+            product: productId,
+          }],
+          { session },
+        );
+        [review] = await Review.create(
+          [{
+            user: req.user._id,
+            order: orderId,
+            product: productId,
+            rating,
+            comment,
+          }],
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return res.status(201).json({
       success: true,
@@ -178,20 +198,98 @@ export const getMyOrderReviews = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    const reviews = await Review.find({
-      order: order._id,
-      user: req.user._id,
-    })
-      .select("product rating comment status createdAt")
-      .lean();
+    const [reviews, claims] = await Promise.all([
+      Review.find({
+        order: order._id,
+        user: req.user._id,
+      })
+        .select("product rating comment status createdAt")
+        .lean(),
+      ReviewClaim.find({
+        order: order._id,
+        user: req.user._id,
+      })
+        .select("product state deletedAt")
+        .lean(),
+    ]);
 
-    return res.status(200).json({ success: true, reviews });
+    const reviewProducts = new Set(reviews.map((review) => String(review.product)));
+    const deletedReviews = claims
+      .filter(
+        (claim) =>
+          claim.state === "deleted" || !reviewProducts.has(String(claim.product)),
+      )
+      .map((claim) => ({
+        product: claim.product,
+        status: "deleted",
+        deletedAt: claim.deletedAt,
+      }));
+
+    return res.status(200).json({
+      success: true,
+      reviews: [...reviews, ...deletedReviews],
+    });
   } catch (error) {
     console.error("Get Customer Order Reviews Error:", error);
     return res.status(500).json({
       success: false,
       message: "Unable to load your review status",
     });
+  }
+};
+
+export const deleteReviewPermanently = async (req, res) => {
+  const { reviewId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+    return res.status(400).json({ success: false, message: "Invalid review ID" });
+  }
+
+  let session;
+  try {
+    session = await mongoose.startSession();
+    let deleted = false;
+    await session.withTransaction(async () => {
+      const review = await Review.findById(reviewId).session(session);
+      if (!review) return;
+
+      await Review.deleteOne({ _id: review._id }).session(session);
+      if (review.order) {
+        await ReviewClaim.updateOne(
+          {
+            user: review.user,
+            order: review.order,
+            product: review.product,
+          },
+          {
+            $set: { state: "deleted", deletedAt: new Date() },
+            $setOnInsert: {
+              user: review.user,
+              order: review.order,
+              product: review.product,
+            },
+          },
+          { upsert: true, session },
+        );
+      }
+      deleted = true;
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Review not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Review permanently deleted",
+    });
+  } catch (error) {
+    console.error("Permanently Delete Review Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to permanently delete review",
+    });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 

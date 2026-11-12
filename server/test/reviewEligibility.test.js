@@ -6,6 +6,7 @@ import {
   isReviewableOrderItem,
 } from "../src/controllers/review.controller.js";
 import Review from "../src/models/review.model.js";
+import ReviewClaim from "../src/models/reviewClaim.model.js";
 import {
   addReviewSchema,
   reviewStatusSchema,
@@ -60,6 +61,21 @@ test("review uniqueness is scoped to the customer, order, and product", () => {
 
   assert.ok(uniqueIndex);
   assert.equal(Review.schema.path("order").isRequired, true);
+});
+
+test("permanent deletion claims preserve one-time eligibility without review content", () => {
+  const uniqueIndex = ReviewClaim.schema.indexes().find(
+    ([keys, options]) =>
+      keys.user === 1 &&
+      keys.order === 1 &&
+      keys.product === 1 &&
+      options.unique === true,
+  );
+  const claimFields = Object.keys(ReviewClaim.schema.paths);
+
+  assert.ok(uniqueIndex);
+  assert.equal(claimFields.includes("comment"), false);
+  assert.equal(claimFields.includes("rating"), false);
 });
 
 test("public review filters preserve trusted Mongo operators under sanitization", () => {

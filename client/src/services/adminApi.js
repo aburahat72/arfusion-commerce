@@ -124,6 +124,10 @@ export const updateAdminReviewStatus = (reviewId, status) => {
   return adminApi.patch(`/reviews/admin/${reviewId}/status`, { status });
 };
 
+export const deleteAdminReview = (reviewId) => {
+  return adminApi.delete(`/reviews/admin/${reviewId}`);
+};
+
 // =====================================================
 // RETURNS
 // =====================================================

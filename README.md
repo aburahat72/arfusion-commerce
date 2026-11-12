@@ -240,7 +240,7 @@ Run commands from the corresponding `client` or `server` directory.
 
 The backend tests cover checkout quantity normalization and analytics date-range validation. Database/payment workflows require configured MongoDB replica-set and Razorpay test credentials for integration testing.
 
-Before deploying the order-verified reviews feature to a database that has used the previous review model, back up the database and run `npm run migrate:review-indexes` from `server`. The migration removes legacy reviews without order provenance from public display and replaces the old uniqueness index. New customer reviews can only be submitted for products in delivered orders, are unique per order and product, and remain hidden until an admin approves them.
+Before deploying the order-verified reviews feature to a database that has used the previous review model, back up the database and run `npm run migrate:review-indexes` from `server`. The migration removes legacy reviews without order provenance from public display, replaces the old uniqueness index, and creates the minimal review claims used to preserve one-time submissions after permanent deletion. New customer reviews can only be submitted for products in delivered orders, are unique per order and product, and remain hidden until an admin approves them.
 
 ## API map
 

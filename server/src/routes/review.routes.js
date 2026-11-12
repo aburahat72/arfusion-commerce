@@ -1,6 +1,7 @@
 import express from "express";
 import {
   addReview,
+  deleteReviewPermanently,
   getAdminReviews,
   getMyOrderReviews,
   getProductReviews,
@@ -33,6 +34,12 @@ router.patch(
   adminAuthorize("admin"),
   validate(reviewStatusSchema),
   updateReviewStatus,
+);
+router.delete(
+  "/admin/:reviewId",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  deleteReviewPermanently,
 );
 router.get("/mine/order/:orderId", customerProtectedRoute, getMyOrderReviews);
 router.post("/", customerProtectedRoute, validate(addReviewSchema), addReview);
