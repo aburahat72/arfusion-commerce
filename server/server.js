@@ -26,6 +26,7 @@ import orderRoutes from "./src/routes/order.routes.js";
 import paymentRoutes from "./src/routes/payment.routes.js";
 import wishlistRoutes from "./src/routes/wishlist.routes.js";
 import reviewRoutes from "./src/routes/review.routes.js";
+import supportRoutes from "./src/routes/support.routes.js";
 import addressRoutes from "./src/routes/address.routes.js";
 import couponRoutes from "./src/routes/coupon.routes.js";
 import dashboardRoutes from "./src/routes/dashboard.routes.js";
@@ -133,6 +134,8 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 
 app.use("/api/reviews", reviewRoutes);
+
+app.use("/api/support", supportRoutes);
 
 app.use("/api/coupons", couponRoutes);
 

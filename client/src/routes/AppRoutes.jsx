@@ -32,6 +32,8 @@ import Addresses from "../pages/Addresses/Addresses";
 import Orders from "../pages/Orders/Orders";
 import OrderDetails from "../pages/Orders/OrderDetails";
 import Settings from "../pages/Settings/Settings";
+import SupportCenter from "../pages/Support/SupportCenter";
+import SupportTicket from "../pages/Support/SupportTicket";
 
 // =====================================================
 // CUSTOMER AUTH
@@ -64,6 +66,8 @@ import AdminEditProduct from "../pages/Admin/Products/AdminEditProduct";
 import AdminInventory from "../pages/Admin/Inventory/AdminInventory";
 import AdminCustomers from "../pages/Admin/Customers/AdminCustomers";
 import AdminReviews from "../pages/Admin/Reviews/AdminReviews";
+import AdminSupport from "../pages/Admin/Support/AdminSupport";
+import AdminSupportTicket from "../pages/Admin/Support/AdminSupportTicket";
 
 // =====================================================
 // ADMIN CATEGORIES
@@ -201,6 +205,10 @@ function AppRoutes() {
 
             <Route path="/profile/orders" element={<Orders />} />
 
+            <Route path="/support" element={<SupportCenter />} />
+
+            <Route path="/support/:ticketId" element={<SupportTicket />} />
+
             {/* CUSTOMER ORDER DETAILS */}
 
             <Route
@@ -278,6 +286,14 @@ function AppRoutes() {
             ================================================= */}
 
             <Route path="/admin/reviews" element={<AdminReviews />} />
+
+            {/* CUSTOMER SUPPORT */}
+            <Route path="/admin/support" element={<AdminSupport />} />
+
+            <Route
+              path="/admin/support/:ticketId"
+              element={<AdminSupportTicket />}
+            />
 
             {/* =================================================
                 CATEGORIES

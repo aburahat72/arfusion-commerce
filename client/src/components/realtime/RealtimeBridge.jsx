@@ -9,6 +9,7 @@ const realtimeEvents = [
   "inventory:updated",
   "payment:status",
   "return:status",
+  "support:update",
 ];
 
 const getSocketOrigin = () => {

@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 
 import Navbar from "../components/navigation/Navbar";
 
@@ -16,6 +16,12 @@ function MainLayout() {
           <p className="text-sm text-text-secondary">
             © 2026 ARFusion Commerce. All rights reserved By Abu Rahat.
           </p>
+          <Link
+            to="/support"
+            className="mt-3 inline-flex items-center justify-center text-sm font-medium text-primary hover:underline"
+          >
+            Contact Support
+          </Link>
         </div>
       </footer>
     </div>

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   FileBarChart,
   Flame,
+  Headset,
   House,
   Image,
   LayoutDashboard,
@@ -186,6 +187,15 @@ function AdminSidebar({ mobileOpen = false, onClose }) {
             to="/admin"
             icon={<LayoutDashboard size={19} />}
             label="Dashboard"
+            onClose={onClose}
+          />
+
+          <NavSection label="Customer Support" />
+
+          <AdminNavItem
+            to="/admin/support"
+            icon={<Headset size={19} />}
+            label="Support Tickets"
             onClose={onClose}
           />
 

@@ -126,7 +126,7 @@ arfusion-commerce/
 - Node.js 20 or newer.
 - npm (lockfiles are provided for both applications).
 - A running MongoDB instance, local or hosted.
-- MongoDB must run as a replica set (including local development) for checkout, cancellation, refunds, and replacement transactions.
+- MongoDB must run as a replica set (including local development) for checkout, cancellation, refunds, replacement, and support-ticket message transactions.
 - Optional service accounts/credentials for Razorpay, Google OAuth, Cloudinary, and SMTP email.
 
 ## Local setup
@@ -240,6 +240,8 @@ Run commands from the corresponding `client` or `server` directory.
 
 The backend tests cover checkout quantity normalization and analytics date-range validation. Database/payment workflows require configured MongoDB replica-set and Razorpay test credentials for integration testing.
 
+Customer support provides paginated private ticket conversations, optional customer-owned order references, unread tracking, assignment, priorities, status management, and admin-only internal notes. Ticket creation and replies use MongoDB transactions, so support requires a replica set. AI responses are intentionally not enabled; an AI provider can be added later without changing ticket ownership or authorization.
+
 Before deploying the order-verified reviews feature to a database that has used the previous review model, back up the database and run `npm run migrate:review-indexes` from `server`. The migration removes legacy reviews without order provenance from public display, replaces the old uniqueness index, and creates the minimal review claims used to preserve one-time submissions after permanent deletion. New customer reviews can only be submitted for products in delivered orders, are unique per order and product, and remain hidden until an admin approves them.
 
 ## API map
@@ -257,6 +259,7 @@ All API routes are mounted under `/api`. The home route `GET /` is a simple serv
 | `/api/cart`, `/api/wishlist`       | Customer cart and wishlist                                |
 | `/api/addresses`                   | Customer addresses                                        |
 | `/api/orders`                      | Customer orders and admin order management                |
+| `/api/support`                     | Private customer support tickets and admin conversations |
 | `/api/payments`                    | Razorpay order creation, verification, and payment status |
 | `/api/reviews`, `/api/coupons`     | Reviews and coupons                                       |
 | `/api/returns`, `/api/inventory`   | Returns and stock management                              |

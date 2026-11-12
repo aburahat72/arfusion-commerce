@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ChevronRight,
+  Headset,
   Heart,
   MapPin,
   Package,
@@ -209,6 +210,13 @@ function Profile() {
               title="My Orders"
               description="View your order history and status"
               onClick={() => navigate("/profile/orders")}
+            />
+
+            <ProfileMenuItem
+              icon={<Headset size={19} />}
+              title="Help & Support"
+              description="Create a ticket and track support replies"
+              onClick={() => navigate("/support")}
             />
 
             <ProfileMenuItem
