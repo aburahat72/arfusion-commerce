@@ -29,11 +29,20 @@ const iconMap = {
   },
 };
 
-function AdminStatCard({ title, value, change, trend, icon }) {
-  const config = iconMap[icon];
+function AdminStatCard({
+  title,
+  value,
+  change,
+  detail,
+  comparisonLabel,
+  icon,
+}) {
+  const config = iconMap[icon] || iconMap.products;
   const Icon = config.component;
 
-  const isPositive = trend === "up";
+  const hasChange = typeof change === "number" && Number.isFinite(change);
+  const isPositive = hasChange && change >= 0;
+  const ChangeIcon = isPositive ? ArrowUpRight : ArrowDownRight;
 
   return (
     <article className="rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm transition hover:shadow-md">
@@ -51,25 +60,28 @@ function AdminStatCard({ title, value, change, trend, icon }) {
             {value}
           </p>
 
-          <div className="mt-1.5 flex items-center gap-1.5">
-            {isPositive ? (
-              <ArrowUpRight size={14} className="text-success" />
-            ) : (
-              <ArrowDownRight size={14} className="text-error" />
-            )}
-
-            <span
-              className={
-                isPositive
-                  ? "text-xs font-semibold text-success"
-                  : "text-xs font-semibold text-error"
-              }
-            >
-              {change}
-            </span>
-
-            <span className="text-xs text-text-secondary">vs last 30 days</span>
-          </div>
+          {detail ? (
+            <p className="mt-1.5 text-xs text-text-secondary">{detail}</p>
+          ) : hasChange ? (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <ChangeIcon
+                size={14}
+                className={isPositive ? "text-success" : "text-error"}
+              />
+              <span
+                className={`text-xs font-semibold ${isPositive ? "text-success" : "text-error"}`}
+              >
+                {Math.abs(change).toFixed(1)}%
+              </span>
+              <span className="text-xs text-text-secondary">
+                vs {comparisonLabel || "previous period"}
+              </span>
+            </div>
+          ) : comparisonLabel ? (
+            <p className="mt-1.5 text-xs text-text-secondary">
+              No previous-period data
+            </p>
+          ) : null}
         </div>
       </div>
     </article>

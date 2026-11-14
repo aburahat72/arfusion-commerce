@@ -104,6 +104,11 @@ export const getAdminAnalytics = async (params = {}, options = {}) => {
   return response.data;
 };
 
+export const getAdminDashboard = async (params = {}, options = {}) => {
+  const response = await adminApi.get("/dashboard", { params, ...options });
+  return response.data;
+};
+
 export const getAdminInventory = async (options = {}) => {
   const response = await adminApi.get("/inventory", options);
   return response.data;

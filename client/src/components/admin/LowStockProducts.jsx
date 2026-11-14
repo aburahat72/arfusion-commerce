@@ -1,192 +1,89 @@
-import { AlertTriangle, ArrowRight, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowRight, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import { lowStockProducts } from "../../data/adminDashboard";
-
-function LowStockProducts() {
+function LowStockProducts({ products = [] }) {
   const navigate = useNavigate();
 
-  /* =====================================================
-     VIEW ALL INVENTORY
-  ===================================================== */
-
-  const handleViewAll = () => {
-    navigate("/admin/inventory");
-  };
-
-  /* =====================================================
-     OPEN PRODUCT INVENTORY
-  ===================================================== */
-
-  const handleProductClick = (product) => {
-    /*
-     * Temporary identifier based on the current demo data.
-     *
-     * Replace this with product.id / product._id when
-     * your real product API is connected.
-     */
-    const productKey = encodeURIComponent(
-      product.sku || product.name.toLowerCase().trim().replace(/\s+/g, "-"),
-    );
-
-    navigate(`/admin/inventory/${productKey}`);
-  };
-
   return (
-    <section className="rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
-      <div className="flex items-center justify-between gap-4">
+    <section className="min-w-0 rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm sm:p-6">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-error/10 text-error">
             <AlertTriangle size={16} />
           </div>
-
-          <h3 className="truncate text-base font-semibold text-text sm:text-lg">
-            Low Stock Products
-          </h3>
+          <h2 className="truncate text-base font-semibold text-text sm:text-lg">
+            Low stock
+          </h2>
         </div>
-
         <button
           type="button"
-          onClick={handleViewAll}
-          className="
-            inline-flex
-            shrink-0
-            items-center
-            gap-1
-            text-xs
-            font-semibold
-            text-primary
-            transition
-            hover:underline
-          "
+          onClick={() => navigate("/admin/inventory")}
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-primary transition hover:underline"
         >
-          View all
+          Inventory
           <ArrowRight size={14} />
         </button>
       </div>
-
-      {/* =================================================
-          PRODUCT LIST
-      ================================================= */}
+      <p className="mt-1 text-xs text-text-secondary">
+        Products with 10 or fewer units available
+      </p>
 
       <div className="mt-4 space-y-1">
-        {lowStockProducts.map((product) => (
-          <LowStockItem
-            key={product.sku}
-            product={product}
-            onClick={() => handleProductClick(product)}
-          />
-        ))}
+        {products.length ? (
+          products.map((product) => (
+            <button
+              key={product._id}
+              type="button"
+              onClick={() => navigate(`/admin/products/${product._id}`)}
+              className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-surface-container"
+            >
+              <ProductImage
+                src={product.images?.[0]?.url}
+                name={product.name}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-text">
+                  {product.name}
+                </p>
+                <p className="mt-0.5 text-[11px] text-text-secondary">
+                  {product.isActive ? "Active product" : "Inactive product"}
+                </p>
+              </div>
+              <StockBadge stock={product.stock} />
+            </button>
+          ))
+        ) : (
+          <p className="py-8 text-center text-sm text-text-secondary">
+            No products need restocking.
+          </p>
+        )}
       </div>
     </section>
   );
 }
 
-/* =========================================================
-   LOW STOCK ITEM
-========================================================= */
-
-function LowStockItem({ product, onClick }) {
-  const stockLevel =
-    product.stock <= 3 ? "critical" : product.stock <= 5 ? "low" : "warning";
-
-  const stockConfig = {
-    critical: {
-      label: "Critical",
-      className: "bg-error/10 text-error",
-    },
-
-    low: {
-      label: "Low",
-      className: "bg-warning/10 text-warning",
-    },
-
-    warning: {
-      label: "Low",
-      className: "bg-orange-50 text-orange-600",
-    },
-  };
-
-  const config = stockConfig[stockLevel];
-
+function ProductImage({ src, name }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="
-        group
-        flex
-        w-full
-        items-center
-        gap-3
-        rounded-xl
-        p-2
-        text-left
-        transition
-        hover:bg-surface-container
-      "
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-container">
+      {src ? (
+        <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+      ) : (
+        <Package size={17} className="text-text-secondary" aria-label={name} />
+      )}
+    </div>
+  );
+}
+
+function StockBadge({ stock }) {
+  const critical = stock <= 3;
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${
+        critical ? "bg-error/10 text-error" : "bg-warning/10 text-warning"
+      }`}
     >
-      {/* Product image */}
-
-      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-surface-container">
-        <img
-          src={product.image}
-          alt={product.name}
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
-      </div>
-
-      {/* Product information */}
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-text">{product.name}</p>
-
-        <p className="mt-0.5 text-[11px] text-text-secondary">
-          SKU: {product.sku}
-        </p>
-      </div>
-
-      {/* Stock */}
-
-      <div className="flex shrink-0 items-center gap-2">
-        <div className="text-right">
-          <p className="text-xs font-semibold text-error">
-            Stock: {product.stock}
-          </p>
-
-          <span
-            className={`
-              mt-1
-              inline-flex
-              rounded-full
-              px-2
-              py-0.5
-              text-[9px]
-              font-semibold
-              ${config.className}
-            `}
-          >
-            {config.label}
-          </span>
-        </div>
-
-        <ExternalLink
-          size={13}
-          className="
-            text-text-secondary
-            opacity-0
-            transition
-            group-hover:text-primary
-            group-hover:opacity-100
-          "
-        />
-      </div>
-    </button>
+      {stock} left
+    </span>
   );
 }
 
