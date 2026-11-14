@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
@@ -35,6 +36,15 @@ export const resolveAnalyticsRange = (from, to, now = new Date()) => {
 };
 
 const sum = (rows, key) => Number(rows[0]?.[key] || 0);
+
+export const buildCustomerDateFilter = (startDate, endDate) => ({
+  role: "customer",
+  createdAt: mongoose.trusted({ $gte: startDate, $lte: endDate }),
+});
+
+export const buildLowStockFilter = () => ({
+  stock: mongoose.trusted({ $lte: 10 }),
+});
 
 export const getAnalytics = async (req, res) => {
   try {
@@ -90,6 +100,20 @@ export const getAnalytics = async (req, res) => {
           $group: {
             _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
             orders: { $sum: 1 },
+            paidOrders: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ["$paymentStatus", "Paid"] },
+                      { $ne: ["$orderStatus", "Cancelled"] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
             revenue: {
               $sum: {
                 $cond: [
@@ -172,10 +196,7 @@ export const getAnalytics = async (req, res) => {
       ]),
       Promise.all([
         User.countDocuments({ role: "customer" }),
-        User.countDocuments({
-          role: "customer",
-          createdAt: { $gte: startDate, $lte: endDate },
-        }),
+        User.countDocuments(buildCustomerDateFilter(startDate, endDate)),
       ]),
       Product.aggregate([
         {
@@ -195,7 +216,7 @@ export const getAnalytics = async (req, res) => {
           },
         },
       ]),
-      Product.find({ stock: { $lte: 10 } })
+      Product.find(buildLowStockFilter())
         .select("name stock isActive")
         .sort({ stock: 1, name: 1 })
         .limit(10)
@@ -254,6 +275,7 @@ export const getAnalytics = async (req, res) => {
       trend.push({
         date,
         orders: point?.orders || 0,
+        paidOrders: point?.paidOrders || 0,
         revenue: point?.revenue || 0,
       });
     }
