@@ -1,5 +1,18 @@
 import mongoose from "mongoose";
 
+export const NOTIFICATION_TYPES = [
+  "Order",
+  "Return",
+  "Refund",
+  "Replacement",
+  "Inventory",
+  "Product",
+  "Review",
+  "Coupon",
+  "Payment",
+  "System",
+];
+
 const notificationSchema = new mongoose.Schema(
   {
     title: {
@@ -14,22 +27,7 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
     },
 
-    type: {
-      type: String,
-      enum: [
-        "Order",
-        "Return",
-        "Refund",
-        "Replacement",
-        "Inventory",
-        "Product",
-        "Review",
-        "Coupon",
-        "Payment",
-        "System",
-      ],
-      required: true,
-    },
+    type: { type: String, enum: NOTIFICATION_TYPES, required: true },
 
     recipient: {
       type: String,

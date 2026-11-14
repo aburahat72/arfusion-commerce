@@ -38,6 +38,27 @@ router.get(
   getUnreadCount,
 );
 
+router.put(
+  "/admin/read-all",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  markAllAsRead,
+);
+
+router.put(
+  "/admin/:notificationId/read",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  markAsRead,
+);
+
+router.delete(
+  "/admin/:notificationId",
+  adminProtectedRoute,
+  adminAuthorize("admin"),
+  deleteNotification,
+);
+
 // Customer Routes
 
 // Get logged-in customer's notifications

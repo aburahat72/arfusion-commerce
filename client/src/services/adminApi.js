@@ -109,6 +109,38 @@ export const getAdminDashboard = async (params = {}, options = {}) => {
   return response.data;
 };
 
+export const getAdminNotifications = async (params = {}, options = {}) => {
+  const response = await adminApi.get("/notifications", {
+    params,
+    ...options,
+  });
+  return response.data;
+};
+
+export const getAdminUnreadNotificationCount = async () => {
+  const response = await adminApi.get("/notifications/unread-count");
+  return response.data;
+};
+
+export const markAdminNotificationAsRead = async (notificationId) => {
+  const response = await adminApi.put(
+    `/notifications/admin/${notificationId}/read`,
+  );
+  return response.data;
+};
+
+export const markAllAdminNotificationsAsRead = async () => {
+  const response = await adminApi.put("/notifications/admin/read-all");
+  return response.data;
+};
+
+export const deleteAdminNotification = async (notificationId) => {
+  const response = await adminApi.delete(
+    `/notifications/admin/${notificationId}`,
+  );
+  return response.data;
+};
+
 export const getAdminInventory = async (options = {}) => {
   const response = await adminApi.get("/inventory", options);
   return response.data;

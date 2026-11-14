@@ -37,19 +37,33 @@ export const createNotification = async ({
 };
 
 // Get Notifications
-export const getNotifications = async (filter = {}) => {
+export const getNotifications = async (filter = {}, options = {}) => {
   try {
-    const notifications = await Notification.find(filter)
+    let query = Notification.find(filter)
       .populate("user", "fullName email")
       .populate("relatedOrder")
       .populate("relatedProduct", "name")
-      .sort({
-        createdAt: -1,
-      });
+      .sort({ createdAt: -1 });
 
-    return notifications;
+    if (Number.isInteger(options.skip) && options.skip > 0) {
+      query = query.skip(options.skip);
+    }
+    if (Number.isInteger(options.limit) && options.limit > 0) {
+      query = query.limit(options.limit);
+    }
+
+    return await query;
   } catch (error) {
     console.error("Get Notifications Error:", error);
+    throw error;
+  }
+};
+
+export const countNotifications = async (filter = {}) => {
+  try {
+    return await Notification.countDocuments(filter);
+  } catch (error) {
+    console.error("Count Notifications Error:", error);
     throw error;
   }
 };
@@ -84,7 +98,7 @@ export const markNotificationAsRead = async (
         isRead: true,
       },
       {
-        new: true,
+        returnDocument: "after",
       },
     );
 
